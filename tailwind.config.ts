@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,6 +62,28 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				// Custom colors for our farmer's market app
+				market: {
+					green: {
+						light: '#8BC34A',
+						DEFAULT: '#4CAF50',
+						dark: '#2E7D32'
+					},
+					brown: {
+						light: '#D7CCC8',
+						DEFAULT: '#795548',
+						dark: '#4E342E'
+					},
+					orange: {
+						light: '#FFCC80',
+						DEFAULT: '#FF9800',
+						dark: '#EF6C00'
+					},
+					bg: {
+						light: '#F9FBF6',
+						DEFAULT: '#F1F8E9'
+					}
 				}
 			},
 			borderRadius: {
