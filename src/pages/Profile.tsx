@@ -1,13 +1,12 @@
-
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MapPin, User, Package, LogOut, ShoppingBasket } from 'lucide-react';
+import { MapPin, User, Package, LogOut, ShoppingBasket, Plus } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const Profile = () => {
@@ -297,7 +296,11 @@ const Profile = () => {
                 <p className="text-muted-foreground mb-6">
                   Add products to showcase and sell to local consumers.
                 </p>
-                <Button className="bg-market-green hover:bg-market-green-dark">
+                <Button 
+                  className="bg-market-green hover:bg-market-green-dark flex items-center gap-2"
+                  onClick={() => navigate('/add-product')}
+                >
+                  <Plus className="h-4 w-4" />
                   Add Product
                 </Button>
               </CardContent>
