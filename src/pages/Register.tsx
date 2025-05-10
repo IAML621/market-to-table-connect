@@ -8,7 +8,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Package } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 
 type Step = 'account' | 'details';
@@ -42,39 +41,15 @@ const Register = () => {
     setError('');
     
     try {
+      console.log('Starting registration process...');
+      // First register the user with just the core information
       await signUp(email, password, username, role);
+      console.log('Registration successful!');
       
-      // Now create the role-specific profile
-      if (role === 'consumer') {
-        const { data: userData } = await supabase.auth.getUser();
-        if (!userData.user) throw new Error("User not found");
-        
-        const { error: consumerError } = await supabase.from('consumers').insert({
-          user_id: userData.user.id,
-          location: location,
-        });
-        
-        if (consumerError) throw consumerError;
-      } else if (role === 'farmer') {
-        const { data: userData } = await supabase.auth.getUser();
-        if (!userData.user) throw new Error("User not found");
-        
-        const { error: farmerError } = await supabase.from('farmers').insert({
-          user_id: userData.user.id,
-          farm_name: farmName,
-          farm_location: farmLocation,
-        });
-        
-        if (farmerError) throw farmerError;
-      }
-      
-      toast({
-        title: "Account created successfully!",
-        description: "Welcome to Market Connect!"
-      });
-      
+      // Success notification is handled in signUp function
       navigate('/');
     } catch (error: any) {
+      console.error('Registration error:', error);
       setError(error.message || 'Failed to sign up. Please try again.');
     }
   };
@@ -165,14 +140,13 @@ const Register = () => {
                 <>
                   {role === 'consumer' ? (
                     <div className="space-y-2">
-                      <Label htmlFor="location">Your Location</Label>
+                      <Label htmlFor="location">Your Location (Optional)</Label>
                       <Input
                         id="location"
                         type="text"
                         placeholder="City, State"
                         value={location}
                         onChange={(e) => setLocation(e.target.value)}
-                        required
                       />
                       <p className="text-xs text-muted-foreground mt-1">
                         This helps us show you nearby farms and products
@@ -181,26 +155,24 @@ const Register = () => {
                   ) : (
                     <>
                       <div className="space-y-2">
-                        <Label htmlFor="farmName">Farm Name</Label>
+                        <Label htmlFor="farmName">Farm Name (Optional)</Label>
                         <Input
                           id="farmName"
                           type="text"
                           placeholder="Green Acres Farm"
                           value={farmName}
                           onChange={(e) => setFarmName(e.target.value)}
-                          required
                         />
                       </div>
                       
                       <div className="space-y-2">
-                        <Label htmlFor="farmLocation">Farm Location</Label>
+                        <Label htmlFor="farmLocation">Farm Location (Optional)</Label>
                         <Input
                           id="farmLocation"
                           type="text"
                           placeholder="City, State"
                           value={farmLocation}
                           onChange={(e) => setFarmLocation(e.target.value)}
-                          required
                         />
                       </div>
                     </>

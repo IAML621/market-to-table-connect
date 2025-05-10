@@ -94,7 +94,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     getCurrentUser();
 
+    // Set up auth listener
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         getCurrentUser();
       } else if (event === 'SIGNED_OUT') {
@@ -156,6 +158,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw authError || new Error("Failed to create account");
       }
 
+      console.log('Auth user created:', authData.user.id);
+
       // Create the user record
       const { error: userError } = await supabase
         .from('users')
@@ -167,12 +171,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       
       if (userError) {
+        console.error('Error creating user profile:', userError);
         toast({
           title: "User profile creation failed",
           description: userError.message,
           variant: "destructive"
         });
         throw userError;
+      }
+
+      console.log('User profile created successfully');
+      
+      // Now the user record exists, we can create the role-specific profile
+      if (role === 'consumer') {
+        const { error: consumerError } = await supabase.from('consumers').insert({
+          user_id: authData.user.id,
+          location: '',  // Set a default empty value
+        });
+        
+        if (consumerError) {
+          console.error('Error creating consumer profile:', consumerError);
+          toast({
+            title: "Consumer profile creation failed",
+            description: consumerError.message,
+            variant: "destructive"
+          });
+          throw consumerError;
+        }
+      } else if (role === 'farmer') {
+        const { error: farmerError } = await supabase.from('farmers').insert({
+          user_id: authData.user.id,
+          farm_name: '',  // Set a default empty value
+          farm_location: '',  // Set a default empty value
+        });
+        
+        if (farmerError) {
+          console.error('Error creating farmer profile:', farmerError);
+          toast({
+            title: "Farmer profile creation failed",
+            description: farmerError.message,
+            variant: "destructive"
+          });
+          throw farmerError;
+        }
       }
 
       toast({
