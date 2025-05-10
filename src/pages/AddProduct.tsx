@@ -1,8 +1,8 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { ensureStorageBucketExists } from '@/integrations/supabase/storage';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,6 +63,44 @@ const AddProduct = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  useEffect(() => {
+    // Initialize the storage bucket when component mounts
+    const initializeStorage = async () => {
+      try {
+        await ensureStorageBucketExists();
+      } catch (error) {
+        console.error('Failed to initialize storage bucket:', error);
+      }
+    };
+
+    initializeStorage();
+  }, []);
+
+  useEffect(() => {
+    // Check authorization status when user or farmer state changes
+    const checkAuthStatus = () => {
+      setIsLoading(false);
+      
+      if (user && user.role === 'farmer') {
+        setIsAuthorized(true);
+        console.log("User authorized as farmer:", user);
+      } else {
+        setIsAuthorized(false);
+        console.log("User not authorized:", user);
+      }
+    };
+
+    if (!user) {
+      // If user is not available yet, wait for a moment as it might be loading
+      const timer = setTimeout(checkAuthStatus, 1000);
+      return () => clearTimeout(timer);
+    } else {
+      checkAuthStatus();
+    }
+  }, [user, farmer]);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -92,7 +130,7 @@ const AddProduct = () => {
   };
 
   const onSubmit = async (data: ProductFormValues) => {
-    if (!user || !farmer) {
+    if (!user || !farmer || user.role !== 'farmer') {
       toast({
         title: "Not authorized",
         description: "You must be logged in as a farmer to add products",
@@ -133,7 +171,7 @@ const AddProduct = () => {
         description: data.description,
         price: data.price,
         stock_level: data.stockLevel,
-        farmer_id: farmer.id,
+        farmer_id: user.id, // Use user.id instead of farmer.id
         category: data.category,
         is_organic: data.isOrganic,
         unit: data.unit,
@@ -164,12 +202,22 @@ const AddProduct = () => {
     }
   };
 
-  // Redirect if not logged in as a farmer
-  if (!user || user.role !== 'farmer') {
+  if (isLoading) {
     return (
       <div className="max-w-3xl mx-auto pt-12 px-4 text-center">
-        <h2 className="text-2xl font-bold mb-4">Unauthorized Access</h2>
-        <p className="mb-6">You must be logged in as a farmer to add products.</p>
+        <h2 className="text-2xl font-bold mb-4">Loading...</h2>
+        <p className="mb-6">Please wait while we verify your account.</p>
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
+    return (
+      <div className="max-w-3xl mx-auto pt-12 px-4 text-center">
+        <div className="bg-red-500 text-white p-6 rounded-md mb-6">
+          <h2 className="text-2xl font-bold mb-2">Not authorized</h2>
+          <p>You must be logged in as a farmer to add products</p>
+        </div>
         <Button onClick={() => navigate('/login')}>Go to Login</Button>
       </div>
     );
