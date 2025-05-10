@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -42,11 +41,18 @@ const Register = () => {
     
     try {
       console.log('Starting registration process...');
-      // First register the user with just the core information
+      // Register the user with authentication info
       await signUp(email, password, username, role);
       console.log('Registration successful!');
       
-      // Success notification is handled in signUp function
+      // Additional profile information will be updated separately
+      // Either on the profile page or in a future update
+      
+      // Navigate to home page after successful registration
+      toast({
+        title: "Registration successful",
+        description: "Your account has been created successfully"
+      });
       navigate('/');
     } catch (error: any) {
       console.error('Registration error:', error);

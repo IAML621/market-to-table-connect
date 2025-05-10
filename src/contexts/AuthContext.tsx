@@ -160,7 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       console.log('Auth user created:', authData.user.id);
 
-      // Create the user record
+      // Create the user record - this user will have a matching ID with auth.users
       const { error: userError } = await supabase
         .from('users')
         .insert({
@@ -182,12 +182,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       console.log('User profile created successfully');
       
-      // Now the user record exists, we can create the role-specific profile
+      // Now create the role-specific profile
       if (role === 'consumer') {
-        const { error: consumerError } = await supabase.from('consumers').insert({
-          user_id: authData.user.id,
-          location: '',  // Set a default empty value
-        });
+        // Insert with the current user ID
+        const { error: consumerError } = await supabase
+          .from('consumers')
+          .insert({
+            user_id: authData.user.id,
+            location: '', // Empty default value
+          });
         
         if (consumerError) {
           console.error('Error creating consumer profile:', consumerError);
@@ -199,11 +202,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw consumerError;
         }
       } else if (role === 'farmer') {
-        const { error: farmerError } = await supabase.from('farmers').insert({
-          user_id: authData.user.id,
-          farm_name: '',  // Set a default empty value
-          farm_location: '',  // Set a default empty value
-        });
+        // Insert with the current user ID
+        const { error: farmerError } = await supabase
+          .from('farmers')
+          .insert({
+            user_id: authData.user.id,
+            farm_name: '', // Empty default value
+            farm_location: '', // Empty default value
+          });
         
         if (farmerError) {
           console.error('Error creating farmer profile:', farmerError);
