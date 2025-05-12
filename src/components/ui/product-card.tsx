@@ -47,7 +47,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick }) =>
         <div className="flex justify-between items-start mb-2">
           <h3 className="font-medium text-lg">{product.name}</h3>
           <div className="font-bold text-lg text-market-green">
-            ${product.price.toFixed(2)}
+            BWP {product.price.toFixed(2)}
             <span className="text-xs text-muted-foreground ml-1">
               /{product.unit || 'each'}
             </span>

@@ -172,7 +172,7 @@ const ProductDetail = () => {
           <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
           
           <div className="text-2xl font-bold text-market-green mb-4">
-            ${product.price.toFixed(2)}
+            BWP {product.price.toFixed(2)}
             <span className="text-sm text-muted-foreground ml-1">
               /{product.unit || 'each'}
             </span>
@@ -229,7 +229,7 @@ const ProductDetail = () => {
               disabled={product.stockLevel <= 0}
               onClick={handleAddToCart}
             >
-              Add to Cart - ${(product.price * quantity).toFixed(2)}
+              Add to Cart - BWP {(product.price * quantity).toFixed(2)}
             </Button>
           </Card>
           
