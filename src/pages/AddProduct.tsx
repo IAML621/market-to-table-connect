@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { ensureStorageBucketExists } from '@/integrations/supabase/storage';
+import { ensureStorageBucketExists, testStoragePermission } from '@/integrations/supabase/storage';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,24 +66,10 @@ const AddProduct = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [bucketInitialized, setBucketInitialized] = useState(false);
+  const [storagePermissionChecked, setStoragePermissionChecked] = useState(false);
+  const [hasStoragePermission, setHasStoragePermission] = useState(false);
 
-  // Initialize storage bucket
-  useEffect(() => {
-    const initializeStorage = async () => {
-      try {
-        const initialized = await ensureStorageBucketExists();
-        setBucketInitialized(initialized);
-        console.log("Storage bucket initialization:", initialized ? "successful" : "failed");
-      } catch (error) {
-        console.error('Failed to initialize storage bucket:', error);
-      }
-    };
-
-    initializeStorage();
-  }, []);
-
-  // Check authentication status
+  // Check authentication and role
   useEffect(() => {
     const checkAuthStatus = () => {
       console.log("Checking auth status, user:", user);
@@ -110,6 +96,28 @@ const AddProduct = () => {
       return () => clearTimeout(timer);
     }
   }, [user]);
+
+  // Check storage permissions
+  useEffect(() => {
+    const checkStoragePermission = async () => {
+      if (isAuthorized && !storagePermissionChecked) {
+        console.log("Checking storage permissions...");
+        try {
+          // First try to check if user has access to the bucket
+          const hasPermission = await testStoragePermission();
+          console.log("Storage permission check result:", hasPermission);
+          setHasStoragePermission(hasPermission);
+        } catch (error) {
+          console.error("Error checking storage permissions:", error);
+          setHasStoragePermission(false);
+        } finally {
+          setStoragePermissionChecked(true);
+        }
+      }
+    };
+
+    checkStoragePermission();
+  }, [isAuthorized, storagePermissionChecked]);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -152,20 +160,25 @@ const AddProduct = () => {
     let imageUrl = null;
 
     try {
+      console.log("Starting product upload process...");
+      console.log("Current user:", user.id, user.role);
+      
       // Upload image if one is selected
-      if (imageFile && bucketInitialized) {
+      if (imageFile) {
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
         const filePath = `product-images/${fileName}`;
 
         console.log("Uploading image to:", filePath);
+        console.log("Storage permission:", hasStoragePermission);
+        
         const { error: uploadError, data: uploadData } = await supabase.storage
           .from('products')
           .upload(filePath, imageFile);
 
         if (uploadError) {
           console.error("Image upload error:", uploadError);
-          throw uploadError;
+          throw new Error(`Image upload failed: ${uploadError.message}`);
         }
 
         // Get public URL for the uploaded image
@@ -191,15 +204,17 @@ const AddProduct = () => {
       };
 
       console.log("Saving product data:", productData);
-      const { error } = await supabase
+      const { error, data: insertedProduct } = await supabase
         .from('products')
-        .insert([productData]);
+        .insert([productData])
+        .select();
 
       if (error) {
         console.error("Database insert error:", error);
-        throw error;
+        throw new Error(`Failed to save product: ${error.message}`);
       }
 
+      console.log("Product added successfully:", insertedProduct);
       toast({
         title: "Product added",
         description: "Your product has been successfully added"
@@ -245,6 +260,13 @@ const AddProduct = () => {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Add New Product</h1>
       </div>
+
+      {!hasStoragePermission && storagePermissionChecked && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6 rounded">
+          <p className="font-bold">Storage Access Warning</p>
+          <p>You may not have permission to upload images. Product will be created without an image.</p>
+        </div>
+      )}
 
       <Card>
         <CardHeader>
