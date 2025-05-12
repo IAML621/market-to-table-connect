@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -57,7 +58,7 @@ const productSchema = z.object({
 type ProductFormValues = z.infer<typeof productSchema>;
 
 const AddProduct = () => {
-  const { user, farmer } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -65,12 +66,15 @@ const AddProduct = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [bucketInitialized, setBucketInitialized] = useState(false);
 
+  // Initialize storage bucket
   useEffect(() => {
-    // Initialize the storage bucket when component mounts
     const initializeStorage = async () => {
       try {
-        await ensureStorageBucketExists();
+        const initialized = await ensureStorageBucketExists();
+        setBucketInitialized(initialized);
+        console.log("Storage bucket initialization:", initialized ? "successful" : "failed");
       } catch (error) {
         console.error('Failed to initialize storage bucket:', error);
       }
@@ -79,28 +83,33 @@ const AddProduct = () => {
     initializeStorage();
   }, []);
 
+  // Check authentication status
   useEffect(() => {
-    // Check authorization status when user or farmer state changes
     const checkAuthStatus = () => {
-      setIsLoading(false);
-      
+      console.log("Checking auth status, user:", user);
       if (user && user.role === 'farmer') {
+        console.log("User is authorized as farmer:", user.id, user.role);
         setIsAuthorized(true);
-        console.log("User authorized as farmer:", user);
       } else {
+        console.log("User is not authorized:", user?.id, user?.role);
         setIsAuthorized(false);
-        console.log("User not authorized:", user);
       }
+      setIsLoading(false);
     };
 
-    if (!user) {
-      // If user is not available yet, wait for a moment as it might be loading
+    if (user === null) {
+      // User is definitely not logged in
+      setIsLoading(false);
+      setIsAuthorized(false);
+    } else if (user) {
+      // User object exists, check role
+      checkAuthStatus();
+    } else {
+      // User might be loading, wait a bit
       const timer = setTimeout(checkAuthStatus, 1000);
       return () => clearTimeout(timer);
-    } else {
-      checkAuthStatus();
     }
-  }, [user, farmer]);
+  }, [user]);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -130,7 +139,7 @@ const AddProduct = () => {
   };
 
   const onSubmit = async (data: ProductFormValues) => {
-    if (!user || !farmer || user.role !== 'farmer') {
+    if (!user || user.role !== 'farmer') {
       toast({
         title: "Not authorized",
         description: "You must be logged in as a farmer to add products",
@@ -144,16 +153,18 @@ const AddProduct = () => {
 
     try {
       // Upload image if one is selected
-      if (imageFile) {
+      if (imageFile && bucketInitialized) {
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
         const filePath = `product-images/${fileName}`;
 
+        console.log("Uploading image to:", filePath);
         const { error: uploadError, data: uploadData } = await supabase.storage
           .from('products')
           .upload(filePath, imageFile);
 
         if (uploadError) {
+          console.error("Image upload error:", uploadError);
           throw uploadError;
         }
 
@@ -163,6 +174,7 @@ const AddProduct = () => {
           .getPublicUrl(filePath);
 
         imageUrl = urlData?.publicUrl || null;
+        console.log("Image URL generated:", imageUrl);
       }
 
       // Save product data to database
@@ -171,18 +183,22 @@ const AddProduct = () => {
         description: data.description,
         price: data.price,
         stock_level: data.stockLevel,
-        farmer_id: user.id, // Use user.id instead of farmer.id
+        farmer_id: user.id,
         category: data.category,
         is_organic: data.isOrganic,
         unit: data.unit,
         image_url: imageUrl
       };
 
+      console.log("Saving product data:", productData);
       const { error } = await supabase
         .from('products')
         .insert([productData]);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Database insert error:", error);
+        throw error;
+      }
 
       toast({
         title: "Product added",
@@ -202,6 +218,7 @@ const AddProduct = () => {
     }
   };
 
+  // Show appropriate UI based on loading/auth state
   if (isLoading) {
     return (
       <div className="max-w-3xl mx-auto pt-12 px-4 text-center">
