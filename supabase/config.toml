@@ -1,2 +1,33 @@
 
 project_id = "ghuhptabsovhkfavfpiv"
+
+# RLS policy setup - execute this SQL in your Supabase SQL editor:
+# 
+# -- Function to create a consumer profile with security definer to bypass RLS
+# CREATE OR REPLACE FUNCTION public.create_consumer_profile(
+#   user_id_param UUID,
+#   location_param TEXT
+# ) 
+# RETURNS TABLE (id UUID) 
+# LANGUAGE plpgsql
+# SECURITY DEFINER
+# AS $$
+# DECLARE
+#   new_id UUID;
+# BEGIN
+#   INSERT INTO public.consumers (user_id, location)
+#   VALUES (user_id_param, location_param)
+#   RETURNING id INTO new_id;
+#   
+#   RETURN QUERY SELECT new_id;
+# END;
+# $$;
+# 
+# -- Enable RLS on consumers table
+# ALTER TABLE public.consumers ENABLE ROW LEVEL SECURITY;
+# 
+# -- Create policy for consumers table
+# CREATE POLICY "Users can view and update their own consumer profile"
+# ON public.consumers
+# FOR ALL
+# USING (auth.uid() = user_id);

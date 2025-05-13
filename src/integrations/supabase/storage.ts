@@ -143,3 +143,47 @@ export const ensureFarmerRecordExists = async (userId: string) => {
     return null;
   }
 };
+
+// Check if the consumer record exists and if not, create it
+export const ensureConsumerRecordExists = async (userId: string) => {
+  try {
+    console.log('Checking if consumer record exists for userId:', userId);
+    
+    // First check if the consumer record already exists
+    const { data: existingConsumer, error: fetchError } = await supabase
+      .from('consumers')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (fetchError) {
+      console.error('Error checking consumer record:', fetchError);
+      return null;
+    }
+    
+    if (existingConsumer) {
+      console.log('Consumer record exists:', existingConsumer);
+      return existingConsumer.id;
+    }
+    
+    // Create a new consumer record with anonymous connection (row-level security bypass)
+    const { data: newConsumer, error: insertError } = await supabase
+      .rpc('create_consumer_profile', { 
+        user_id_param: userId,
+        location_param: 'Location not specified'  // Default location
+      })
+      .select('id')
+      .single();
+    
+    if (insertError) {
+      console.error('Error creating consumer record:', insertError);
+      throw insertError;
+    }
+    
+    console.log('New consumer record created:', newConsumer);
+    return newConsumer?.id || null;
+  } catch (error) {
+    console.error('Error in ensureConsumerRecordExists:', error);
+    return null;
+  }
+};

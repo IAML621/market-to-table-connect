@@ -13,6 +13,7 @@ interface AuthContextProps {
   signOut: () => Promise<void>;
   updateUserProfile: (updates: Partial<User | Farmer | Consumer>) => Promise<void>;
   getFarmerId: () => Promise<string | null>;
+  getConsumerId: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextProps | undefined>(undefined);
@@ -312,7 +313,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Add a new method to get the farmer ID for the current user
+  // Get the farmer ID for the current user
   const getFarmerId = async (): Promise<string | null> => {
     if (!user || user.role !== 'farmer') {
       return null;
@@ -343,6 +344,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Get the consumer ID for the current user
+  const getConsumerId = async (): Promise<string | null> => {
+    if (!user || user.role !== 'consumer') {
+      return null;
+    }
+
+    try {
+      // First check if we already have the consumer record loaded
+      if (consumer && consumer.id) {
+        return consumer.id;
+      }
+
+      // Otherwise, fetch it from the database
+      const { data, error } = await supabase
+        .from('consumers')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching consumer ID:', error);
+        return null;
+      }
+
+      return data.id;
+    } catch (error) {
+      console.error('Error in getConsumerId:', error);
+      return null;
+    }
+  };
+
   return (
     <AuthContext.Provider 
       value={{ 
@@ -354,7 +386,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUp, 
         signOut,
         updateUserProfile,
-        getFarmerId
+        getFarmerId,
+        getConsumerId
       }}
     >
       {children}

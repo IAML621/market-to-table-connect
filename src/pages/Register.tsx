@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Package } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ensureConsumerRecordExists } from '@/integrations/supabase/storage';
 
 type Step = 'account' | 'details';
 type UserRole = 'consumer' | 'farmer';
