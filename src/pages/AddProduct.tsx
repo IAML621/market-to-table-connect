@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { ensureStorageBucketExists, testStoragePermission } from '@/integrations/supabase/storage';
+import { ensureStorageBucketExists, uploadProductImage } from '@/integrations/supabase/storage';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,7 +57,7 @@ const productSchema = z.object({
 type ProductFormValues = z.infer<typeof productSchema>;
 
 const AddProduct = () => {
-  const { user } = useAuth();
+  const { user, getFarmerId } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -66,8 +65,7 @@ const AddProduct = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [storagePermissionChecked, setStoragePermissionChecked] = useState(false);
-  const [hasStoragePermission, setHasStoragePermission] = useState(false);
+  const [bucketExists, setBucketExists] = useState(false);
 
   // Check authentication and role
   useEffect(() => {
@@ -97,27 +95,24 @@ const AddProduct = () => {
     }
   }, [user]);
 
-  // Check storage permissions
+  // Check storage bucket exists
   useEffect(() => {
-    const checkStoragePermission = async () => {
-      if (isAuthorized && !storagePermissionChecked) {
-        console.log("Checking storage permissions...");
+    const checkStorageBucket = async () => {
+      if (isAuthorized) {
         try {
-          // First try to check if user has access to the bucket
-          const hasPermission = await testStoragePermission();
-          console.log("Storage permission check result:", hasPermission);
-          setHasStoragePermission(hasPermission);
+          console.log("Checking if storage bucket exists...");
+          const exists = await ensureStorageBucketExists();
+          console.log("Storage bucket check result:", exists);
+          setBucketExists(exists);
         } catch (error) {
-          console.error("Error checking storage permissions:", error);
-          setHasStoragePermission(false);
-        } finally {
-          setStoragePermissionChecked(true);
+          console.error("Error checking storage bucket:", error);
+          setBucketExists(false);
         }
       }
     };
 
-    checkStoragePermission();
-  }, [isAuthorized, storagePermissionChecked]);
+    checkStorageBucket();
+  }, [isAuthorized]);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -161,32 +156,19 @@ const AddProduct = () => {
 
     try {
       console.log("Starting product upload process...");
-      console.log("Current user:", user.id, user.role);
+      
+      // Get farmer ID for the current user
+      const farmerId = await getFarmerId();
+      if (!farmerId) {
+        throw new Error('Could not determine your farmer ID. Please ensure your account is properly set up.');
+      }
+      
+      console.log("Current farmer ID:", farmerId);
       
       // Upload image if one is selected
       if (imageFile) {
-        const fileExt = imageFile.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-        const filePath = `product-images/${fileName}`;
-
-        console.log("Uploading image to:", filePath);
-        console.log("Storage permission:", hasStoragePermission);
-        
-        const { error: uploadError, data: uploadData } = await supabase.storage
-          .from('products')
-          .upload(filePath, imageFile);
-
-        if (uploadError) {
-          console.error("Image upload error:", uploadError);
-          throw new Error(`Image upload failed: ${uploadError.message}`);
-        }
-
-        // Get public URL for the uploaded image
-        const { data: urlData } = supabase.storage
-          .from('products')
-          .getPublicUrl(filePath);
-
-        imageUrl = urlData?.publicUrl || null;
+        console.log("Uploading product image...");
+        imageUrl = await uploadProductImage(imageFile);
         console.log("Image URL generated:", imageUrl);
       }
 
@@ -196,7 +178,7 @@ const AddProduct = () => {
         description: data.description,
         price: data.price,
         stock_level: data.stockLevel,
-        farmer_id: user.id,
+        farmer_id: farmerId,
         category: data.category,
         is_organic: data.isOrganic,
         unit: data.unit,
@@ -261,10 +243,10 @@ const AddProduct = () => {
         <h1 className="text-2xl font-bold">Add New Product</h1>
       </div>
 
-      {!hasStoragePermission && storagePermissionChecked && (
+      {!bucketExists && isAuthorized && (
         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6 rounded">
           <p className="font-bold">Storage Access Warning</p>
-          <p>You may not have permission to upload images. Product will be created without an image.</p>
+          <p>The products storage bucket is not accessible. Product will be created without an image.</p>
         </div>
       )}
 
