@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User, Farmer, Consumer } from '@/types';
@@ -13,6 +12,7 @@ interface AuthContextProps {
   signUp: (email: string, password: string, username: string, role: 'farmer' | 'consumer') => Promise<void>;
   signOut: () => Promise<void>;
   updateUserProfile: (updates: Partial<User | Farmer | Consumer>) => Promise<void>;
+  getFarmerId: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextProps | undefined>(undefined);
@@ -312,6 +312,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Add a new method to get the farmer ID for the current user
+  const getFarmerId = async (): Promise<string | null> => {
+    if (!user || user.role !== 'farmer') {
+      return null;
+    }
+
+    try {
+      // First check if we already have the farmer record loaded
+      if (farmer && farmer.id) {
+        return farmer.id;
+      }
+
+      // Otherwise, fetch it from the database
+      const { data, error } = await supabase
+        .from('farmers')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching farmer ID:', error);
+        return null;
+      }
+
+      return data.id;
+    } catch (error) {
+      console.error('Error in getFarmerId:', error);
+      return null;
+    }
+  };
+
   return (
     <AuthContext.Provider 
       value={{ 
@@ -322,7 +353,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signIn, 
         signUp, 
         signOut,
-        updateUserProfile
+        updateUserProfile,
+        getFarmerId
       }}
     >
       {children}

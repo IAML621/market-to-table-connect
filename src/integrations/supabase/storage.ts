@@ -47,25 +47,41 @@ export const ensureStorageBucketExists = async () => {
   }
 };
 
-// Check if the user has permission to upload to the products bucket
-export const testStoragePermission = async () => {
+// Upload a product image to storage
+export const uploadProductImage = async (file: File) => {
   try {
-    // Try to get the bucket to test permissions
-    const { data, error } = await supabase.storage.getBucket('products');
-    
-    if (error) {
-      if (error.message?.includes('The resource was not found')) {
-        // Bucket doesn't exist yet, try to create it
-        return ensureStorageBucketExists();
-      }
-      console.error('Error testing bucket permissions:', error);
-      return false;
+    // Ensure bucket exists first
+    const bucketExists = await ensureStorageBucketExists();
+    if (!bucketExists) {
+      throw new Error('Failed to ensure products storage bucket exists');
     }
     
-    console.log('User has access to products bucket');
-    return true;
+    // Create a unique file name based on timestamp
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
+    
+    // Upload the file
+    const { data, error } = await supabase.storage
+      .from('products')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+      
+    if (error) {
+      console.error('Error uploading product image:', error);
+      throw error;
+    }
+    
+    // Get public URL for the uploaded file
+    const { data: urlData } = supabase.storage
+      .from('products')
+      .getPublicUrl(filePath);
+      
+    return urlData.publicUrl;
   } catch (error) {
-    console.error('Error testing storage permissions:', error);
-    return false;
+    console.error('Error in uploadProductImage:', error);
+    throw error;
   }
 };
