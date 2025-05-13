@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { ensureStorageBucketExists, uploadProductImage } from '@/integrations/supabase/storage';
+import { ensureStorageBucketExists, uploadProductImage, ensureFarmerRecordExists } from '@/integrations/supabase/storage';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,7 +58,7 @@ const productSchema = z.object({
 type ProductFormValues = z.infer<typeof productSchema>;
 
 const AddProduct = () => {
-  const { user, getFarmerId } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -157,13 +158,19 @@ const AddProduct = () => {
     try {
       console.log("Starting product upload process...");
       
-      // Get farmer ID for the current user
-      const farmerId = await getFarmerId();
+      // Get or create farmer ID for the current user
+      if (!user.id) {
+        throw new Error('User ID is missing. Please ensure you are properly logged in.');
+      }
+      
+      console.log("Ensuring farmer record exists for user:", user.id);
+      const farmerId = await ensureFarmerRecordExists(user.id);
+      
       if (!farmerId) {
         throw new Error('Could not determine your farmer ID. Please ensure your account is properly set up.');
       }
       
-      console.log("Current farmer ID:", farmerId);
+      console.log("Using farmer ID for product:", farmerId);
       
       // Upload image if one is selected
       if (imageFile) {

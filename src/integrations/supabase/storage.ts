@@ -85,3 +85,61 @@ export const uploadProductImage = async (file: File) => {
     throw error;
   }
 };
+
+// Check if the farmer record exists and if not, create it
+export const ensureFarmerRecordExists = async (userId: string) => {
+  try {
+    console.log('Checking if farmer record exists for userId:', userId);
+    
+    // First check if the farmer record already exists
+    const { data: existingFarmer, error: fetchError } = await supabase
+      .from('farmers')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (fetchError) {
+      console.error('Error checking farmer record:', fetchError);
+      return null;
+    }
+    
+    if (existingFarmer) {
+      console.log('Farmer record exists:', existingFarmer);
+      return existingFarmer.id;
+    }
+    
+    // Get user info to create farmer record
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('username')
+      .eq('id', userId)
+      .single();
+    
+    if (userError || !userData) {
+      console.error('Error fetching user data:', userError);
+      return null;
+    }
+    
+    // Create a new farmer record
+    const { data: newFarmer, error: insertError } = await supabase
+      .from('farmers')
+      .insert({
+        user_id: userId,
+        farm_name: userData.username + "'s Farm",  // Default farm name based on username
+        farm_location: 'Location not specified'    // Default location
+      })
+      .select('id')
+      .single();
+    
+    if (insertError) {
+      console.error('Error creating farmer record:', insertError);
+      return null;
+    }
+    
+    console.log('New farmer record created:', newFarmer);
+    return newFarmer.id;
+  } catch (error) {
+    console.error('Error in ensureFarmerRecordExists:', error);
+    return null;
+  }
+};
