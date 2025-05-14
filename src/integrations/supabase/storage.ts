@@ -1,4 +1,3 @@
-
 import { supabase } from './client';
 
 // Function to ensure the products bucket exists

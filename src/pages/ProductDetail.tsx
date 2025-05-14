@@ -18,6 +18,7 @@ import {
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
 
 const ProductDetail = () => {
   const { productId } = useParams<{ productId: string }>();
@@ -27,6 +28,7 @@ const ProductDetail = () => {
   const { addToCart } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -81,6 +83,10 @@ const ProductDetail = () => {
   const handleAddToCart = () => {
     if (product) {
       addToCart(product, quantity);
+      toast({
+        title: "Added to cart",
+        description: `${quantity} ${product.name} added to your cart.`
+      });
     }
   };
 
@@ -92,7 +98,17 @@ const ProductDetail = () => {
   };
 
   const startChat = async () => {
-    if (!user || !product) return;
+    if (!user) {
+      toast({
+        title: "Login required",
+        description: "Please login to chat with the farmer",
+        variant: "destructive"
+      });
+      navigate(`/login?redirect=/products/${productId}`);
+      return;
+    }
+    
+    if (!product) return;
     navigate(`/messages?farmerId=${product.farmerId}`);
   };
 
@@ -233,16 +249,14 @@ const ProductDetail = () => {
             </Button>
           </Card>
           
-          {user && (
-            <Button 
-              variant="outline" 
-              className="w-full flex gap-2"
-              onClick={startChat}
-            >
-              <MessageCircle className="h-4 w-4" />
-              Chat with the Farmer
-            </Button>
-          )}
+          <Button 
+            variant="outline" 
+            className="w-full flex gap-2"
+            onClick={startChat}
+          >
+            <MessageCircle className="h-4 w-4" />
+            Chat with the Farmer
+          </Button>
         </div>
       </div>
     </div>

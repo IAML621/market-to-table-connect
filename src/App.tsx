@@ -14,7 +14,8 @@ import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Profile from "./pages/Profile";
 import Messages from "./pages/Messages";
-import AddProduct from "./pages/AddProduct"; // Add import for new page
+import AddProduct from "./pages/AddProduct";
+import Products from "./pages/Products"; // Add import for new page
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -37,13 +38,14 @@ const App = () => (
             <Routes>
               <Route element={<MainLayout />}>
                 <Route path="/" element={<Index />} />
+                <Route path="/products" element={<Products />} /> {/* Add new route */}
                 <Route path="/products/:productId" element={<ProductDetail />} />
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/messages" element={<Messages />} />
-                <Route path="/add-product" element={<AddProduct />} /> {/* Add new route */}
+                <Route path="/add-product" element={<AddProduct />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Route>

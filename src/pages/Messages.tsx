@@ -1,64 +1,347 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { MessageCircle, Send, User } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Message } from '@/types';
 
 const Messages = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, getFarmerId, getConsumerId } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const params = new URLSearchParams(location.search);
   const targetFarmerId = params.get('farmerId');
   
   const [conversations, setConversations] = useState<any[]>([]);
   const [activeConversation, setActiveConversation] = useState<string | null>(targetFarmerId);
   const [message, setMessage] = useState('');
-  
-  // This would fetch real messages from Supabase in a full implementation
-  useEffect(() => {
-    if (user) {
-      // Simulate conversations
-      const mockConversations = [
-        {
-          id: '1',
-          name: 'Green Acres Farm',
-          lastMessage: 'Are the tomatoes still available?',
-          timestamp: new Date().toISOString(),
-          unread: 2
-        },
-        {
-          id: '2',
-          name: 'Sunshine Organics',
-          lastMessage: 'Your order #123 has been confirmed',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          unread: 0
-        }
-      ];
-      
-      setConversations(mockConversations);
-      
-      // If no active conversation but we have some, set the first one as active
-      if (!activeConversation && mockConversations.length > 0) {
-        setActiveConversation(mockConversations[0].id);
-      }
-    }
-  }, [user, activeConversation]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [recipientName, setRecipientName] = useState<string>('');
+  const [senderId, setSenderId] = useState<string | null>(null);
 
-  // Simulate sending a message
-  const sendMessage = (e: React.FormEvent) => {
+  // Fetch user ID based on role
+  useEffect(() => {
+    const fetchUserId = async () => {
+      if (user) {
+        if (user.role === 'farmer') {
+          const id = await getFarmerId();
+          setSenderId(id);
+        } else if (user.role === 'consumer') {
+          const id = await getConsumerId();
+          setSenderId(id);
+        }
+      }
+    };
+    
+    fetchUserId();
+  }, [user, getFarmerId, getConsumerId]);
+  
+  // Fetch conversations
+  useEffect(() => {
+    const fetchConversations = async () => {
+      if (!user || !senderId) return;
+      
+      try {
+        let query;
+        
+        // For farmers, get messages from consumers
+        // For consumers, get messages from farmers
+        if (user.role === 'farmer') {
+          query = supabase
+            .from('messages')
+            .select(`
+              sender_id,
+              receiver_id,
+              content,
+              timestamp,
+              is_read,
+              consumers!inner (
+                user_id,
+                location,
+                users!inner (
+                  username
+                )
+              )
+            `)
+            .eq('receiver_id', senderId)
+            .order('timestamp', { ascending: false });
+        } else {
+          query = supabase
+            .from('messages')
+            .select(`
+              sender_id,
+              receiver_id,
+              content,
+              timestamp,
+              is_read,
+              farmers!inner (
+                user_id,
+                farm_name,
+                farm_location,
+                users!inner (
+                  username
+                )
+              )
+            `)
+            .eq('receiver_id', senderId)
+            .order('timestamp', { ascending: false });
+        }
+        
+        const { data, error } = await query;
+        
+        if (error) throw error;
+        
+        if (data) {
+          // Process and group conversations by sender
+          const conversationMap = new Map();
+          
+          for (const msg of data) {
+            const partnerId = msg.sender_id;
+            const partnerName = user.role === 'farmer'
+              ? msg.consumers.users.username
+              : msg.farmers.users.username;
+            
+            const partnerInfo = user.role === 'farmer'
+              ? msg.consumers.location
+              : msg.farmers.farm_name;
+            
+            if (!conversationMap.has(partnerId)) {
+              conversationMap.set(partnerId, {
+                id: partnerId,
+                name: partnerName,
+                info: partnerInfo,
+                lastMessage: msg.content,
+                timestamp: msg.timestamp,
+                unread: msg.is_read ? 0 : 1
+              });
+            } else if (!msg.is_read) {
+              const conv = conversationMap.get(partnerId);
+              conv.unread = (conv.unread || 0) + 1;
+              conversationMap.set(partnerId, conv);
+            }
+          }
+          
+          // Also fetch conversations where the user is the sender
+          let sentQuery;
+          
+          if (user.role === 'farmer') {
+            sentQuery = supabase
+              .from('messages')
+              .select(`
+                sender_id,
+                receiver_id,
+                content,
+                timestamp,
+                is_read,
+                consumers!inner (
+                  user_id,
+                  location,
+                  users!inner (
+                    username
+                  )
+                )
+              `)
+              .eq('sender_id', senderId)
+              .order('timestamp', { ascending: false });
+          } else {
+            sentQuery = supabase
+              .from('messages')
+              .select(`
+                sender_id,
+                receiver_id,
+                content,
+                timestamp,
+                is_read,
+                farmers!inner (
+                  user_id,
+                  farm_name,
+                  farm_location,
+                  users!inner (
+                    username
+                  )
+                )
+              `)
+              .eq('sender_id', senderId)
+              .order('timestamp', { ascending: false });
+          }
+          
+          const { data: sentData, error: sentError } = await sentQuery;
+          
+          if (sentError) throw sentError;
+          
+          if (sentData) {
+            for (const msg of sentData) {
+              const partnerId = msg.receiver_id;
+              const partnerName = user.role === 'consumer'
+                ? msg.farmers.users.username
+                : msg.consumers.users.username;
+              
+              const partnerInfo = user.role === 'consumer'
+                ? msg.farmers.farm_name
+                : msg.consumers.location;
+              
+              if (!conversationMap.has(partnerId)) {
+                conversationMap.set(partnerId, {
+                  id: partnerId,
+                  name: partnerName,
+                  info: partnerInfo,
+                  lastMessage: msg.content,
+                  timestamp: msg.timestamp,
+                  unread: 0
+                });
+              }
+            }
+          }
+          
+          setConversations(Array.from(conversationMap.values()));
+          
+          // If targetFarmerId is provided, set it as active conversation
+          if (targetFarmerId && conversationMap.has(targetFarmerId)) {
+            setActiveConversation(targetFarmerId);
+            // Get farmer name for header
+            const farmerData = conversationMap.get(targetFarmerId);
+            setRecipientName(farmerData?.name || 'Farmer');
+          } else if (!activeConversation && conversationMap.size > 0) {
+            // Otherwise set first conversation as active
+            const firstId = conversationMap.keys().next().value;
+            setActiveConversation(firstId);
+            const firstConv = conversationMap.get(firstId);
+            setRecipientName(firstConv?.name || 'Conversation');
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching conversations:', error);
+        toast({
+          variant: "destructive",
+          title: "Failed to load conversations",
+          description: "Please try again later."
+        });
+      }
+    };
+    
+    fetchConversations();
+  }, [user, senderId, toast, targetFarmerId, activeConversation, getFarmerId, getConsumerId]);
+
+  // Fetch messages for active conversation
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!activeConversation || !senderId) return;
+      
+      try {
+        // Get all messages between these two users (in either direction)
+        const { data, error } = await supabase
+          .from('messages')
+          .select(`
+            id,
+            sender_id,
+            receiver_id,
+            content, 
+            timestamp,
+            is_read
+          `)
+          .or(`sender_id.eq.${senderId},receiver_id.eq.${senderId}`)
+          .or(`sender_id.eq.${activeConversation},receiver_id.eq.${activeConversation}`)
+          .order('timestamp', { ascending: true });
+        
+        if (error) throw error;
+        
+        if (data) {
+          // Filter to only include messages between these two specific users
+          const relevantMessages = data.filter(msg => 
+            (msg.sender_id === senderId && msg.receiver_id === activeConversation) || 
+            (msg.sender_id === activeConversation && msg.receiver_id === senderId)
+          );
+          
+          // Mark unread messages as read
+          const unreadMsgIds = relevantMessages
+            .filter(msg => msg.receiver_id === senderId && !msg.is_read)
+            .map(msg => msg.id);
+          
+          if (unreadMsgIds.length > 0) {
+            await supabase
+              .from('messages')
+              .update({ is_read: true })
+              .in('id', unreadMsgIds);
+          }
+          
+          setMessages(relevantMessages.map(msg => ({
+            id: msg.id,
+            senderId: msg.sender_id,
+            receiverId: msg.receiver_id,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            isRead: msg.is_read
+          })));
+          
+          // Update conversation name
+          const conversation = conversations.find(c => c.id === activeConversation);
+          if (conversation) {
+            setRecipientName(conversation.name);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+        toast({
+          variant: "destructive",
+          title: "Failed to load messages",
+          description: "Please try again later."
+        });
+      }
+    };
+    
+    fetchMessages();
+  }, [activeConversation, senderId, conversations, toast]);
+
+  // Send message
+  const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim() === '') return;
     
-    // In a real implementation, this would send to Supabase
-    console.log(`Sending message to conversation ${activeConversation}: ${message}`);
+    if (!message.trim() || !activeConversation || !senderId) return;
     
-    // Clear the input
-    setMessage('');
+    try {
+      const newMessage = {
+        sender_id: senderId,
+        receiver_id: activeConversation,
+        content: message,
+        timestamp: new Date().toISOString(),
+        is_read: false
+      };
+      
+      const { error } = await supabase.from('messages').insert(newMessage);
+      
+      if (error) throw error;
+      
+      // Add to local messages
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(), // Temporary ID until refresh
+        senderId: senderId!,
+        receiverId: activeConversation!,
+        content: message,
+        timestamp: new Date().toISOString(),
+        isRead: false
+      }]);
+      
+      // Clear input
+      setMessage('');
+      
+      toast({
+        title: "Message sent",
+        description: "Your message has been sent successfully."
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({
+        variant: "destructive",
+        title: "Failed to send message",
+        description: "Please try again later."
+      });
+    }
   };
 
   if (loading) {
@@ -136,6 +419,11 @@ const Messages = () => {
               <div className="text-center py-12">
                 <MessageCircle className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                 <p className="text-muted-foreground">No conversations yet</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  {user.role === 'consumer' 
+                    ? "Visit a farm's product page to start a conversation" 
+                    : "Customers will message you when they have questions"}
+                </p>
               </div>
             )}
           </div>
@@ -145,33 +433,35 @@ const Messages = () => {
             {activeConversation ? (
               <>
                 <div className="p-4 border-b">
-                  <h3 className="font-medium">
-                    {conversations.find(c => c.id === activeConversation)?.name || 'Conversation'}
-                  </h3>
+                  <h3 className="font-medium">{recipientName || 'Conversation'}</h3>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  <div className="flex justify-start">
-                    <div className="bg-secondary rounded-lg p-3 max-w-[80%]">
-                      <p className="text-sm">
-                        Hello! Do you have any fresh vegetables available this week?
-                      </p>
-                      <span className="text-xs text-muted-foreground mt-1 block">
-                        {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                  {messages.length > 0 ? (
+                    messages.map((msg) => (
+                      <div key={msg.id} className={`flex ${msg.senderId === senderId ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`rounded-lg p-3 max-w-[80%] ${
+                          msg.senderId === senderId 
+                            ? 'bg-market-green/10 text-market-green-dark' 
+                            : 'bg-secondary'
+                        }`}>
+                          <p className="text-sm">{msg.content}</p>
+                          <span className={`text-xs ${
+                            msg.senderId === senderId 
+                              ? 'text-market-green-dark/70' 
+                              : 'text-muted-foreground'
+                          } mt-1 block`}>
+                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12">
+                      <p className="text-muted-foreground">No messages yet</p>
+                      <p className="text-sm text-muted-foreground mt-2">Send a message to start the conversation</p>
                     </div>
-                  </div>
-                  
-                  <div className="flex justify-end">
-                    <div className="bg-market-green/10 text-market-green-dark rounded-lg p-3 max-w-[80%]">
-                      <p className="text-sm">
-                        Yes! We have fresh tomatoes, cucumbers, and lettuce. Would you like to place an order?
-                      </p>
-                      <span className="text-xs text-market-green-dark/70 mt-1 block">
-                        {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  </div>
+                  )}
                 </div>
                 
                 <div className="p-4 border-t">
