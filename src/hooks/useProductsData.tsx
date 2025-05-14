@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Product } from '@/types';
+import { toast } from '@/components/ui/use-toast';
 
 export const useProductsData = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -30,7 +31,15 @@ export const useProductsData = () => {
           .gt('stock_level', 0)
           .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (error) {
+          console.error('Error fetching products:', error);
+          toast({
+            title: "Failed to load products",
+            description: "Please try again later",
+            variant: "destructive"
+          });
+          return;
+        }
 
         if (data) {
           const formattedProducts = data.map(item => ({
@@ -61,6 +70,11 @@ export const useProductsData = () => {
         }
       } catch (error) {
         console.error('Error fetching products:', error);
+        toast({
+          title: "Failed to load products",
+          description: "Please try again later",
+          variant: "destructive"
+        });
       } finally {
         setLoading(false);
       }

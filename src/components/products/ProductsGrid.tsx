@@ -41,11 +41,18 @@ export const ProductsGrid: React.FC<ProductsGridProps> = ({
             onClick={() => navigate(`/products/${product.id}`)}
           />
         ))
-      ) : (
+      ) : products.length > 0 ? (
         <div className="col-span-full text-center py-12">
-          <h3 className="text-xl font-medium mb-2">No products found</h3>
+          <h3 className="text-xl font-medium mb-2">No matching products found</h3>
           <p className="text-muted-foreground">
             Try adjusting your search or filters to find what you're looking for.
+          </p>
+        </div>
+      ) : (
+        <div className="col-span-full text-center py-12">
+          <h3 className="text-xl font-medium mb-2">No products available</h3>
+          <p className="text-muted-foreground">
+            There are currently no products available. Please check back later.
           </p>
         </div>
       )}
