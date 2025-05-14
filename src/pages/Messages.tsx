@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -6,9 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { MessageCircle, Send, User } from 'lucide-react';
+import { MessageCircle, Send, User, Plus, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Message } from '@/types';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger,
+  DialogFooter 
+} from '@/components/ui/dialog';
 
 const Messages = () => {
   const { user, loading, getFarmerId, getConsumerId } = useAuth();
@@ -24,6 +33,14 @@ const Messages = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [recipientName, setRecipientName] = useState<string>('');
   const [senderId, setSenderId] = useState<string | null>(null);
+  
+  // New state for new conversation dialog
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [potentialRecipients, setPotentialRecipients] = useState<any[]>([]);
+  const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null);
+  const [firstMessage, setFirstMessage] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // Fetch user ID based on role
   useEffect(() => {
@@ -298,6 +315,147 @@ const Messages = () => {
     fetchMessages();
   }, [activeConversation, senderId, conversations, toast]);
 
+  // Search for potential recipients
+  const handleSearch = async () => {
+    if (!senderId || !searchTerm.trim() || !user) return;
+    
+    try {
+      setSearchLoading(true);
+      
+      // For consumers, search for farmers
+      // For farmers, search for consumers
+      let query;
+      
+      if (user.role === 'farmer') {
+        query = supabase
+          .from('consumers')
+          .select(`
+            id,
+            location,
+            users!inner (
+              username
+            )
+          `)
+          .textSearch('users.username', searchTerm, {
+            type: 'websearch',
+            config: 'english'
+          });
+      } else {
+        query = supabase
+          .from('farmers')
+          .select(`
+            id,
+            farm_name,
+            farm_location,
+            users!inner (
+              username
+            )
+          `)
+          .textSearch('users.username', searchTerm, {
+            type: 'websearch',
+            config: 'english'
+          });
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
+      if (data) {
+        const formattedResults = data.map(item => ({
+          id: item.id,
+          name: item.users.username,
+          info: user.role === 'farmer' ? item.location : item.farm_name
+        }));
+        
+        setPotentialRecipients(formattedResults);
+      }
+    } catch (error) {
+      console.error('Error searching for recipients:', error);
+      toast({
+        variant: "destructive",
+        title: "Search failed",
+        description: "Please try again later."
+      });
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Start new conversation
+  const startNewConversation = async () => {
+    if (!selectedRecipient || !firstMessage.trim() || !senderId) {
+      toast({
+        variant: "destructive",
+        title: "Missing information",
+        description: "Please select a recipient and enter a message."
+      });
+      return;
+    }
+    
+    try {
+      const newMessage = {
+        sender_id: senderId,
+        receiver_id: selectedRecipient,
+        content: firstMessage,
+        timestamp: new Date().toISOString(),
+        is_read: false
+      };
+      
+      const { error } = await supabase.from('messages').insert(newMessage);
+      
+      if (error) throw error;
+      
+      // Close dialog and reset form
+      setDialogOpen(false);
+      setSearchTerm('');
+      setPotentialRecipients([]);
+      setSelectedRecipient(null);
+      setFirstMessage('');
+      
+      // Set the new conversation as active
+      setActiveConversation(selectedRecipient);
+      
+      // Reload conversations to include new one
+      const recipient = potentialRecipients.find(r => r.id === selectedRecipient);
+      if (recipient) {
+        const newConversation = {
+          id: selectedRecipient,
+          name: recipient.name,
+          info: recipient.info,
+          lastMessage: firstMessage,
+          timestamp: new Date().toISOString(),
+          unread: 0
+        };
+        
+        setConversations(prev => [newConversation, ...prev]);
+        setRecipientName(recipient.name);
+      }
+      
+      // Add new message to messages
+      setMessages([{
+        id: Date.now().toString(),
+        senderId: senderId,
+        receiverId: selectedRecipient,
+        content: firstMessage,
+        timestamp: new Date().toISOString(),
+        isRead: false
+      }]);
+      
+      toast({
+        title: "Conversation started",
+        description: "Your message has been sent."
+      });
+    } catch (error) {
+      console.error('Error starting conversation:', error);
+      toast({
+        variant: "destructive",
+        title: "Failed to start conversation",
+        description: "Please try again later."
+      });
+    }
+  };
+
   // Send message
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -376,8 +534,86 @@ const Messages = () => {
         <div className="grid md:grid-cols-3 h-[600px]">
           {/* Conversation List */}
           <div className="border-r border-border/50 md:col-span-1 overflow-y-auto">
-            <div className="p-4 border-b">
-              <Input placeholder="Search conversations..." />
+            <div className="p-4 border-b flex items-center justify-between">
+              <Input 
+                placeholder="Search conversations..." 
+                className="mr-2"
+              />
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="icon" className="bg-market-green hover:bg-market-green-dark" aria-label="New conversation">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Start a new conversation</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="flex items-center space-x-2">
+                      <Input 
+                        placeholder={`Search for ${user.role === 'farmer' ? 'consumers' : 'farmers'}...`}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button 
+                        onClick={handleSearch}
+                        disabled={searchLoading}
+                        className="bg-market-green hover:bg-market-green-dark"
+                      >
+                        <Search className="h-4 w-4 mr-2" />
+                        Search
+                      </Button>
+                    </div>
+                    
+                    {potentialRecipients.length > 0 && (
+                      <div className="border rounded-lg overflow-hidden">
+                        {potentialRecipients.map((recipient) => (
+                          <div 
+                            key={recipient.id}
+                            className={`flex items-center p-3 gap-3 cursor-pointer hover:bg-secondary/50 border-b last:border-0 ${
+                              selectedRecipient === recipient.id ? 'bg-secondary' : ''
+                            }`}
+                            onClick={() => setSelectedRecipient(recipient.id)}
+                          >
+                            <div className="rounded-full bg-primary/10 h-8 w-8 flex items-center justify-center">
+                              <User className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <h3 className="font-medium">{recipient.name}</h3>
+                              <p className="text-xs text-muted-foreground">{recipient.info}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Message</label>
+                      <Input
+                        placeholder="Type your first message..."
+                        value={firstMessage}
+                        onChange={(e) => setFirstMessage(e.target.value)}
+                        disabled={!selectedRecipient}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={startNewConversation}
+                      disabled={!selectedRecipient || !firstMessage.trim()}
+                      className="bg-market-green hover:bg-market-green-dark"
+                    >
+                      Start Conversation
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
             
             {conversations.length > 0 ? (
@@ -420,9 +656,7 @@ const Messages = () => {
                 <MessageCircle className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                 <p className="text-muted-foreground">No conversations yet</p>
                 <p className="text-sm text-muted-foreground mt-2">
-                  {user.role === 'consumer' 
-                    ? "Visit a farm's product page to start a conversation" 
-                    : "Customers will message you when they have questions"}
+                  Click the + button above to start a new conversation
                 </p>
               </div>
             )}

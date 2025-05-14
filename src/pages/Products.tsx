@@ -68,10 +68,11 @@ const Products = () => {
           setProducts(formattedProducts);
           setFilteredProducts(formattedProducts);
           
-          // Extract unique categories
-          const uniqueCategories = Array.from(
-            new Set(formattedProducts.map(product => product.category || 'Uncategorized'))
+          // Extract unique categories and ensure none are empty strings
+          const allCategories = formattedProducts.map(product => 
+            product.category ? product.category : 'Uncategorized'
           );
+          const uniqueCategories = Array.from(new Set(allCategories));
           setCategories(uniqueCategories);
         }
       } catch (error) {
