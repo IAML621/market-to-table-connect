@@ -11,11 +11,15 @@ export const useProductsData = () => {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         setLoading(true);
+        setError(null);
+        
+        // Simplified query to just get all active products
         const { data, error } = await supabase
           .from('products')
           .select(`
@@ -33,6 +37,7 @@ export const useProductsData = () => {
 
         if (error) {
           console.error('Error fetching products:', error);
+          setError('Failed to load products. Please try again later.');
           toast({
             title: "Failed to load products",
             description: "Please try again later",
@@ -41,7 +46,9 @@ export const useProductsData = () => {
           return;
         }
 
-        if (data) {
+        if (data && data.length > 0) {
+          console.log('Products fetched successfully:', data.length);
+          
           const formattedProducts = data.map(item => ({
             id: item.id,
             name: item.name,
@@ -61,15 +68,22 @@ export const useProductsData = () => {
           setProducts(formattedProducts);
           setFilteredProducts(formattedProducts);
           
-          // Extract unique categories and ensure none are empty strings
+          // Extract unique categories
           const allCategories = formattedProducts.map(product => 
             product.category ? product.category : 'Uncategorized'
           );
           const uniqueCategories = Array.from(new Set(allCategories));
           setCategories(uniqueCategories);
+          console.log('Categories extracted:', uniqueCategories);
+        } else {
+          console.log('No products returned from database');
+          setProducts([]);
+          setFilteredProducts([]);
+          setCategories([]);
         }
       } catch (error) {
-        console.error('Error fetching products:', error);
+        console.error('Exception in fetchProducts:', error);
+        setError('An unexpected error occurred. Please try again later.');
         toast({
           title: "Failed to load products",
           description: "Please try again later",
@@ -85,6 +99,11 @@ export const useProductsData = () => {
 
   // Filter products when search query or category filter changes
   useEffect(() => {
+    if (products.length === 0) {
+      setFilteredProducts([]);
+      return;
+    }
+    
     let filtered = products;
     
     // Apply category filter
@@ -103,6 +122,7 @@ export const useProductsData = () => {
       );
     }
     
+    console.log(`Filtered products: ${filtered.length} results`);
     setFilteredProducts(filtered);
   }, [searchQuery, categoryFilter, products]);
 
@@ -114,6 +134,7 @@ export const useProductsData = () => {
     searchQuery,
     setSearchQuery,
     categoryFilter,
-    setCategoryFilter
+    setCategoryFilter,
+    error
   };
 };
