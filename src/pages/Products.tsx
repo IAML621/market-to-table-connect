@@ -21,7 +21,7 @@ const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const navigate = useNavigate();
@@ -89,7 +89,7 @@ const Products = () => {
     let filtered = products;
     
     // Apply category filter
-    if (categoryFilter) {
+    if (categoryFilter && categoryFilter !== 'all') {
       filtered = filtered.filter(product => product.category === categoryFilter);
     }
     
@@ -164,7 +164,7 @@ const Products = () => {
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Categories</SelectItem>
+              <SelectItem value="all">All Categories</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category} value={category}>
                   {category}
@@ -173,7 +173,7 @@ const Products = () => {
             </SelectContent>
           </Select>
           
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => setCategoryFilter('')}>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => setCategoryFilter('all')}>
             <Filter className="h-4 w-4" />
             Reset
           </Button>

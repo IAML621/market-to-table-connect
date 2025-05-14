@@ -1,141 +1,139 @@
-import { supabase } from './client';
+import { supabase } from '@/lib/supabase';
 
-// Function to ensure the products bucket exists
-export const ensureStorageBucketExists = async () => {
+/**
+ * Ensures that the storage bucket exists.
+ * @returns {Promise<boolean>} - True if the bucket exists or was created, false if there was an error.
+ */
+export const ensureStorageBucketExists = async (): Promise<boolean> => {
+  const bucketName = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET_NAME;
+
+  if (!bucketName) {
+    console.error('NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET_NAME environment variable is not set.');
+    return false;
+  }
+
   try {
-    // Check if the bucket already exists
-    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-    
-    if (listError) {
-      console.error('Error checking storage buckets:', listError);
-      return false;
-    }
-    
-    const bucketExists = buckets?.some(bucket => bucket.name === 'products');
-    
-    // Only create the bucket if it doesn't exist
-    if (!bucketExists) {
-      console.log('Creating products bucket...');
-      
-      // Create the bucket using the service role client for admin privileges
-      const { error } = await supabase.storage.createBucket('products', {
-        public: true, // Make the bucket public so images can be viewed without authentication
-        fileSizeLimit: 5242880 // 5MB limit for product images
-      });
-      
-      if (error) {
-        console.error('Error creating products storage bucket:', error);
-        
-        // Special handling for RLS errors
-        if (error.message?.includes('row-level security')) {
-          console.log('RLS error detected. Bucket may exist but not be visible to the current user.');
-          return true; // Continue assuming bucket exists but is hidden due to RLS
-        }
-        return false;
-      } else {
-        console.log('Products storage bucket created successfully');
+    // Check if the bucket exists by attempting to get its metadata.
+    await supabase.storage.getBucket(bucketName);
+    console.log(`Storage bucket "${bucketName}" already exists.`);
+    return true;
+  } catch (error: any) {
+    // If the bucket does not exist, the getBucket method will throw an error.
+    // We catch the error and create the bucket.
+    if (error.message.includes('Storage bucket not found')) {
+      try {
+        // Create the bucket with public access.
+        await supabase.storage.createBucket(bucketName, { public: true });
+        console.log(`Storage bucket "${bucketName}" created successfully.`);
         return true;
+      } catch (createError) {
+        console.error('Error creating storage bucket:', createError);
+        return false;
       }
     } else {
-      console.log('Products bucket already exists');
-      return true;
+      // If the error is not due to the bucket not existing, log the error and return false.
+      console.error('Error checking storage bucket:', error);
+      return false;
     }
-  } catch (error) {
-    console.error('Error checking/creating storage bucket:', error);
-    return false;
   }
 };
 
-// Upload a product image to storage
-export const uploadProductImage = async (file: File) => {
+/**
+ * Uploads a product image to Supabase storage.
+ * @param {File} file - The image file to upload.
+ * @returns {Promise<string | null>} - The public URL of the uploaded image, or null if there was an error.
+ */
+export const uploadProductImage = async (file: File): Promise<string | null> => {
+  const bucketName = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET_NAME;
+
+  if (!bucketName) {
+    console.error('NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET_NAME environment variable is not set.');
+    return null;
+  }
+
+  const fileName = `${Date.now()}-${file.name}`;
+  const filePath = `products/${fileName}`;
+
   try {
-    // Ensure bucket exists first
-    const bucketExists = await ensureStorageBucketExists();
-    if (!bucketExists) {
-      throw new Error('Failed to ensure products storage bucket exists');
-    }
-    
-    // Create a unique file name based on timestamp
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `${fileName}`;
-    
-    // Upload the file
     const { data, error } = await supabase.storage
-      .from('products')
+      .from(bucketName)
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: false
       });
-      
+
     if (error) {
-      console.error('Error uploading product image:', error);
-      throw error;
+      console.error('Error uploading image:', error);
+      return null;
     }
-    
-    // Get public URL for the uploaded file
-    const { data: urlData } = supabase.storage
-      .from('products')
-      .getPublicUrl(filePath);
-      
-    return urlData.publicUrl;
+
+    const publicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucketName}/${filePath}`;
+    console.log('Image uploaded successfully:', publicUrl);
+    return publicUrl;
   } catch (error) {
-    console.error('Error in uploadProductImage:', error);
-    throw error;
+    console.error('Error uploading image:', error);
+    return null;
   }
 };
 
-// Check if the farmer record exists and if not, create it
-export const ensureFarmerRecordExists = async (userId: string) => {
+/**
+ * Ensures that a farmer record exists for the given user and returns the farmer ID
+ */
+export const ensureFarmerRecordExists = async (userId: string): Promise<string | null> => {
   try {
-    console.log('Checking if farmer record exists for userId:', userId);
-    
-    // First check if the farmer record already exists
-    const { data: existingFarmer, error: fetchError } = await supabase
+    console.log('Ensuring farmer record exists for user:', userId);
+
+    // First, check if a farmer record already exists for this user
+    const { data: existingFarmers, error: fetchError } = await supabase
       .from('farmers')
       .select('id')
       .eq('user_id', userId)
-      .maybeSingle();
-    
-    if (fetchError) {
-      console.error('Error checking farmer record:', fetchError);
-      return null;
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      // PGRST116 is the error code for "no rows returned" - we can ignore this one
+      console.error('Error checking for existing farmer:', fetchError);
+      throw fetchError;
     }
-    
-    if (existingFarmer) {
-      console.log('Farmer record exists:', existingFarmer);
-      return existingFarmer.id;
+
+    if (existingFarmers) {
+      console.log('Found existing farmer record:', existingFarmers.id);
+      return existingFarmers.id;
     }
-    
-    // Get user info to create farmer record
+
+    console.log('No farmer record found, creating new one for user:', userId);
+
+    // Get user data to set default values
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('username')
       .eq('id', userId)
       .single();
-    
-    if (userError || !userData) {
+
+    if (userError) {
       console.error('Error fetching user data:', userError);
-      return null;
+      throw userError;
     }
-    
+
     // Create a new farmer record
     const { data: newFarmer, error: insertError } = await supabase
       .from('farmers')
-      .insert({
-        user_id: userId,
-        farm_name: userData.username + "'s Farm",  // Default farm name based on username
-        farm_location: 'Location not specified'    // Default location
-      })
+      .insert([
+        { 
+          user_id: userId,
+          farm_name: `${userData?.username || 'Unnamed'}'s Farm`, // Default farm name
+          farm_location: 'Not specified' // Default location
+        }
+      ])
       .select('id')
       .single();
-    
+
     if (insertError) {
       console.error('Error creating farmer record:', insertError);
-      return null;
+      throw insertError;
     }
-    
-    console.log('New farmer record created:', newFarmer);
+
+    console.log('Created new farmer record:', newFarmer.id);
     return newFarmer.id;
   } catch (error) {
     console.error('Error in ensureFarmerRecordExists:', error);
@@ -143,44 +141,64 @@ export const ensureFarmerRecordExists = async (userId: string) => {
   }
 };
 
-// Check if the consumer record exists and if not, create it
-export const ensureConsumerRecordExists = async (userId: string) => {
+/**
+ * Ensures that a consumer record exists for the given user and returns the consumer ID
+ */
+export const ensureConsumerRecordExists = async (userId: string): Promise<string | null> => {
   try {
-    console.log('Checking if consumer record exists for userId:', userId);
-    
-    // First check if the consumer record already exists
-    const { data: existingConsumer, error: fetchError } = await supabase
+    console.log('Ensuring consumer record exists for user:', userId);
+
+    // First, check if a consumer record already exists for this user
+    const { data: existingConsumers, error: fetchError } = await supabase
       .from('consumers')
       .select('id')
       .eq('user_id', userId)
-      .maybeSingle();
-    
-    if (fetchError) {
-      console.error('Error checking consumer record:', fetchError);
-      return null;
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      // PGRST116 is the error code for "no rows returned" - we can ignore this one
+      console.error('Error checking for existing consumer:', fetchError);
+      throw fetchError;
     }
-    
-    if (existingConsumer) {
-      console.log('Consumer record exists:', existingConsumer);
-      return existingConsumer.id;
+
+    if (existingConsumers) {
+      console.log('Found existing consumer record:', existingConsumers.id);
+      return existingConsumers.id;
     }
-    
-    // Create a new consumer record with anonymous connection (row-level security bypass)
+
+    console.log('No consumer record found, creating new one for user:', userId);
+
+    // Get user data to set default values
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('username')
+      .eq('id', userId)
+      .single();
+
+    if (userError) {
+      console.error('Error fetching user data:', userError);
+      throw userError;
+    }
+
+    // Create a new consumer record
     const { data: newConsumer, error: insertError } = await supabase
-      .rpc('create_consumer_profile', { 
-        user_id_param: userId,
-        location_param: 'Location not specified'  // Default location
-      })
+      .from('consumers')
+      .insert([
+        { 
+          user_id: userId,
+          location: 'Not specified' // Default location
+        }
+      ])
       .select('id')
       .single();
-    
+
     if (insertError) {
       console.error('Error creating consumer record:', insertError);
       throw insertError;
     }
-    
-    console.log('New consumer record created:', newConsumer);
-    return newConsumer?.id || null;
+
+    console.log('Created new consumer record:', newConsumer.id);
+    return newConsumer.id;
   } catch (error) {
     console.error('Error in ensureConsumerRecordExists:', error);
     return null;
