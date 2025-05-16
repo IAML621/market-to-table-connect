@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -45,7 +44,7 @@ const Register = () => {
       console.log('Starting registration process...');
       
       // Register the user with authentication info
-      const result = await signUp(email, password, username, role);
+      const result = await signUp(email, password, username, role, role === 'consumer' ? location : undefined);
       console.log('Registration successful!', result);
       
       // The user object should be in the AuthContext now

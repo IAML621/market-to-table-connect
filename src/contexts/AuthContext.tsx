@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User, Farmer, Consumer } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { ensureConsumerRecordExists } from '@/integrations/supabase/storage';
+import { ensureConsumerRecordExists, ensureFarmerRecordExists } from '@/integrations/supabase/storage';
 
 interface AuthContextProps {
   user: User | null;
@@ -10,7 +10,7 @@ interface AuthContextProps {
   consumer: Consumer | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, username: string, role: 'farmer' | 'consumer') => Promise<void>;
+  signUp: (email: string, password: string, username: string, role: 'farmer' | 'consumer', location?: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserProfile: (updates: Partial<User | Farmer | Consumer>) => Promise<void>;
   getFarmerId: () => Promise<string | null>;
@@ -141,7 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, username: string, role: 'farmer' | 'consumer') => {
+  const signUp = async (email: string, password: string, username: string, role: 'farmer' | 'consumer', location?: string) => {
     try {
       setLoading(true);
       
@@ -186,8 +186,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Now create the role-specific profile
       if (role === 'consumer') {
-        // Use the RPC function to create a consumer profile
-        const success = await ensureConsumerRecordExists(authData.user.id);
+        // Use the function to create a consumer profile with the provided location
+        const success = await ensureConsumerRecordExists(authData.user.id, location || '');
         
         if (!success) {
           console.error('Error creating consumer profile using RPC');
@@ -201,24 +201,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         console.log('Consumer profile created successfully via RPC');
       } else if (role === 'farmer') {
-        // Insert with the current user ID
-        const { error: farmerError } = await supabase
-          .from('farmers')
-          .insert({
-            user_id: authData.user.id,
-            farm_name: '', // Empty default value
-            farm_location: '', // Empty default value
-          });
+        // Create farmer profile
+        const success = await ensureFarmerRecordExists(authData.user.id);
         
-        if (farmerError) {
-          console.error('Error creating farmer profile:', farmerError);
+        if (!success) {
+          console.error('Error creating farmer profile');
           toast({
             title: "Farmer profile creation failed",
-            description: farmerError.message,
+            description: "Could not create your farmer profile",
             variant: "destructive"
           });
-          throw farmerError;
+          throw new Error("Failed to create farmer profile");
         }
+        
+        console.log('Farmer profile created successfully');
       }
 
       toast({

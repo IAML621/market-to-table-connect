@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
  * Ensures that a consumer record exists for the given user ID
  * This function is used during registration and when accessing pages that require a consumer profile
  */
-export const ensureConsumerRecordExists = async (userId: string): Promise<boolean> => {
+export const ensureConsumerRecordExists = async (userId: string, location: string = ''): Promise<boolean> => {
   if (!userId) return false;
   
   try {
@@ -27,16 +27,16 @@ export const ensureConsumerRecordExists = async (userId: string): Promise<boolea
     if (!existingConsumer) {
       console.log('No consumer record found, creating one...');
       
-      // Use a direct SQL RPC call to create the consumer record
+      // Use a direct SQL RPC call to create the consumer profile
       // This is a workaround for RLS policies that might prevent direct inserts
       const { data: newConsumer, error: insertError } = await supabase
         .rpc('create_consumer_profile', { 
           user_id_param: userId,
-          location_param: ''
+          location_param: location
         });
         
       if (insertError) {
-        console.error('Error creating consumer record:', insertError);
+        console.error('Error creating consumer profile:', insertError);
         return false;
       }
       
