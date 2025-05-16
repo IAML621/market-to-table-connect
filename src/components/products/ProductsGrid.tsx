@@ -37,41 +37,48 @@ export const ProductsGrid: React.FC<ProductsGridProps> = ({
   }
   
   return (
-    <section className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+    <section>
       {loading ? (
         // Loading skeletons
-        Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="product-card">
-            <Skeleton className="h-48 w-full" />
-            <div className="p-3 space-y-2">
-              <Skeleton className="h-6 w-3/4" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-8 w-full mt-3" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="product-card">
+              <Skeleton className="h-48 w-full" />
+              <div className="p-3 space-y-2">
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-8 w-full mt-3" />
+              </div>
             </div>
-          </div>
-        ))
+          ))}
+        </div>
       ) : filteredProducts.length > 0 ? (
-        filteredProducts.map(product => (
-          <ProductCard 
-            key={product.id} 
-            product={product}
-            onClick={() => navigate(`/products/${product.id}`)}
-          />
-        ))
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {filteredProducts.map(product => (
+            <ProductCard 
+              key={product.id} 
+              product={product}
+              onClick={() => navigate(`/products/${product.id}`)}
+            />
+          ))}
+        </div>
       ) : products.length > 0 ? (
-        <div className="col-span-full text-center py-12">
+        <div className="text-center py-12">
           <h3 className="text-xl font-medium mb-2">No matching products found</h3>
           <p className="text-muted-foreground">
             Try adjusting your search or filters to find what you're looking for.
           </p>
         </div>
       ) : (
-        <div className="col-span-full text-center py-12">
+        <div className="text-center py-12">
           <h3 className="text-xl font-medium mb-2">No products available</h3>
           <p className="text-muted-foreground">
             There are currently no products available in the marketplace. Please check back later.
           </p>
+          <pre className="text-left mt-6 p-4 bg-gray-100 rounded text-xs overflow-auto">
+            Debug info: {JSON.stringify({ productsLength: products.length, loading }, null, 2)}
+          </pre>
         </div>
       )}
     </section>

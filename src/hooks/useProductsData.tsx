@@ -19,19 +19,10 @@ export const useProductsData = () => {
         setLoading(true);
         setError(null);
         
-        // Simplified query to just get all active products
+        // Simplified query to just get all active products without any joins that might filter out data
         const { data, error } = await supabase
           .from('products')
-          .select(`
-            *,
-            farmers!inner (
-              farm_name,
-              farm_location,
-              users!inner (
-                username
-              )
-            )
-          `)
+          .select('*')
           .gt('stock_level', 0)
           .order('created_at', { ascending: false });
 
@@ -47,24 +38,57 @@ export const useProductsData = () => {
         }
 
         if (data && data.length > 0) {
-          console.log('Products fetched successfully:', data.length);
+          console.log('Raw products data from database:', data);
           
-          const formattedProducts = data.map(item => ({
-            id: item.id,
-            name: item.name,
-            description: item.description,
-            price: item.price,
-            stockLevel: item.stock_level,
-            farmerId: item.farmer_id,
-            farmName: item.farmers.farm_name,
-            farmerName: item.farmers.users.username,
-            imageUrl: item.image_url || undefined,
-            created_at: item.created_at,
-            category: item.category || 'Uncategorized',
-            isOrganic: item.is_organic || false,
-            unit: item.unit || 'each'
+          // Process the product data
+          const formattedProducts = await Promise.all(data.map(async (item) => {
+            // Fetch farmer details separately to avoid join issues
+            const { data: farmerData } = await supabase
+              .from('farmers')
+              .select(`
+                farm_name,
+                farm_location,
+                user_id
+              `)
+              .eq('id', item.farmer_id)
+              .single();
+              
+            let farmName = 'Unknown Farm';
+            let farmerName = 'Unknown Farmer';
+            
+            if (farmerData) {
+              farmName = farmerData.farm_name || 'Unnamed Farm';
+              
+              // Get the farmer's username
+              const { data: userData } = await supabase
+                .from('users')
+                .select('username')
+                .eq('id', farmerData.user_id)
+                .single();
+                
+              if (userData) {
+                farmerName = userData.username;
+              }
+            }
+            
+            return {
+              id: item.id,
+              name: item.name,
+              description: item.description,
+              price: item.price,
+              stockLevel: item.stock_level,
+              farmerId: item.farmer_id,
+              farmName: farmName,
+              farmerName: farmerName,
+              imageUrl: item.image_url || undefined,
+              created_at: item.created_at,
+              category: item.category || 'Uncategorized',
+              isOrganic: item.is_organic || false,
+              unit: item.unit || 'each'
+            };
           }));
           
+          console.log('Formatted products:', formattedProducts);
           setProducts(formattedProducts);
           setFilteredProducts(formattedProducts);
           
