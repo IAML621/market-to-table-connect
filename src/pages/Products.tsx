@@ -5,8 +5,8 @@ import { useProductsData } from '@/hooks/useProductsData';
 import { ProductsHero } from '@/components/products/ProductsHero';
 import { ProductsFilter } from '@/components/products/ProductsFilter';
 import { ProductsGrid } from '@/components/products/ProductsGrid';
-import { toast } from '@/components/ui/use-toast';
-import { ensureConsumerRecordExists } from '@/integrations/supabase/storage';
+import { toast } from '@/hooks/use-toast'; // Update import path
+import { supabase } from '@/lib/supabase'; // Direct import
 
 const Products = () => {
   const { user, consumer } = useAuth();
@@ -24,21 +24,54 @@ const Products = () => {
 
   // Ensure consumer record exists if user is a consumer
   useEffect(() => {
-    const checkConsumerRecord = async () => {
+    const ensureConsumerRecordExists = async () => {
       if (user && user.role === 'consumer' && user.id) {
         try {
-          const consumerId = await ensureConsumerRecordExists(user.id);
-          console.log('Ensured consumer record exists:', consumerId);
+          console.log('Checking/creating consumer record for user:', user.id);
+          
+          // First check if consumer record exists
+          const { data: existingConsumer, error: fetchError } = await supabase
+            .from('consumers')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+            
+          if (fetchError && fetchError.code !== 'PGRST116') { // Not found error
+            console.error('Error checking consumer record:', fetchError);
+            return;
+          }
+          
+          // If no record exists, create one
+          if (!existingConsumer) {
+            console.log('No consumer record found, creating one...');
+            const { data: newConsumer, error: insertError } = await supabase
+              .from('consumers')
+              .insert({
+                user_id: user.id,
+                location: ''  // Default empty location
+              })
+              .select('id')
+              .single();
+              
+            if (insertError) {
+              console.error('Error creating consumer record:', insertError);
+              return;
+            }
+            
+            console.log('Consumer record created:', newConsumer);
+          } else {
+            console.log('Consumer record exists:', existingConsumer);
+          }
         } catch (err) {
-          console.error('Error ensuring consumer record exists:', err);
+          console.error('Exception ensuring consumer record:', err);
         }
       }
     };
     
-    checkConsumerRecord();
+    ensureConsumerRecordExists();
   }, [user]);
 
-  // Show a toast if we have products data loaded but nothing matches the filters
+  // Show toast notification based on search and filter results
   useEffect(() => {
     if (!loading && products.length > 0 && filteredProducts.length === 0) {
       toast({
@@ -54,6 +87,8 @@ const Products = () => {
   };
 
   const handleSearch = () => {
+    console.log('Search triggered. Products:', products.length, 'Filtered:', filteredProducts.length);
+    
     if (products.length === 0 && !loading) {
       toast({
         title: "No products available",

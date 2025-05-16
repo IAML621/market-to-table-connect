@@ -76,9 +76,17 @@ export const ProductsGrid: React.FC<ProductsGridProps> = ({
           <p className="text-muted-foreground">
             There are currently no products available in the marketplace. Please check back later.
           </p>
-          <pre className="text-left mt-6 p-4 bg-gray-100 rounded text-xs overflow-auto">
-            Debug info: {JSON.stringify({ productsLength: products.length, loading }, null, 2)}
-          </pre>
+          <div className="mt-6 p-4 bg-gray-100 rounded overflow-auto max-w-xl mx-auto">
+            <h4 className="text-sm font-semibold mb-2">Debug Information:</h4>
+            <pre className="text-xs whitespace-pre-wrap text-left">
+              {JSON.stringify({ 
+                productsLength: products.length, 
+                filteredLength: filteredProducts.length, 
+                loading, 
+                categories: Array.isArray(products) ? Array.from(new Set(products.map(p => p.category))) : []
+              }, null, 2)}
+            </pre>
+          </div>
         </div>
       )}
     </section>
