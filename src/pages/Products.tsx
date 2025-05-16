@@ -5,7 +5,7 @@ import { useProductsData } from '@/hooks/useProductsData';
 import { ProductsHero } from '@/components/products/ProductsHero';
 import { ProductsFilter } from '@/components/products/ProductsFilter';
 import { ProductsGrid } from '@/components/products/ProductsGrid';
-import { toast } from '@/hooks/use-toast'; // Update import path
+import { toast } from '@/hooks/use-toast'; // Corrected import
 import { supabase } from '@/lib/supabase'; // Direct import
 
 const Products = () => {
