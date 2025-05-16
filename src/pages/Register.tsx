@@ -43,12 +43,13 @@ const Register = () => {
     
     try {
       console.log('Starting registration process...');
-      // Register the user with authentication info
-      await signUp(email, password, username, role);
-      console.log('Registration successful!');
       
-      // Additional profile information will be updated separately
-      // Either on the profile page or in a future update
+      // Register the user with authentication info
+      const result = await signUp(email, password, username, role);
+      console.log('Registration successful!', result);
+      
+      // The user object should be in the AuthContext now
+      // The associated consumer/farmer record is created in the AuthContext
       
       // Navigate to home page after successful registration
       toast({
@@ -59,6 +60,11 @@ const Register = () => {
     } catch (error: any) {
       console.error('Registration error:', error);
       setError(error.message || 'Failed to sign up. Please try again.');
+      toast({
+        title: "Registration failed",
+        description: error.message || "There was a problem creating your account",
+        variant: "destructive"
+      });
     }
   };
 

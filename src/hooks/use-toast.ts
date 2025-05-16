@@ -1,3 +1,4 @@
+
 import * as React from "react"
 import {
   Toast,
@@ -11,7 +12,7 @@ import {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 5
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 5000 // Changed from 1000000 to 5000 (5 seconds)
 
 type ToasterToast = ToastProps & {
   id: string
@@ -134,14 +135,11 @@ type Toast = Omit<ToasterToast, "id">
 
 function toast({ ...props }: Toast) {
   const id = genId()
-
-  const update = (props: ToasterToast) =>
-    dispatch({
-      type: actionTypes.UPDATE_TOAST,
-      toast: { ...props, id },
-    })
+  
+  // Setup automatic toast dismissal
   const dismiss = () => dispatch({ type: actionTypes.DISMISS_TOAST, toastId: id })
-
+  
+  // Add the toast
   dispatch({
     type: actionTypes.ADD_TOAST,
     toast: {
@@ -153,11 +151,24 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+  
+  // Set a timeout to auto-dismiss the toast
+  if (props.duration !== Infinity) {
+    const timeout = setTimeout(() => {
+      dismiss()
+    }, props.duration || TOAST_REMOVE_DELAY)
+    
+    toastTimeouts.set(id, timeout)
+  }
 
   return {
     id: id,
     dismiss,
-    update,
+    update: (props: ToasterToast) =>
+      dispatch({
+        type: actionTypes.UPDATE_TOAST,
+        toast: { ...props, id },
+      }),
   }
 }
 

@@ -1,7 +1,9 @@
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User, Farmer, Consumer } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { ensureConsumerRecordExists } from '@/integrations/supabase/storage';
 
 interface AuthContextProps {
   user: User | null;
@@ -185,23 +187,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Now create the role-specific profile
       if (role === 'consumer') {
-        // Insert with the current user ID
-        const { error: consumerError } = await supabase
-          .from('consumers')
-          .insert({
-            user_id: authData.user.id,
-            location: '', // Empty default value
-          });
+        // Use the RPC function to create a consumer profile
+        const success = await ensureConsumerRecordExists(authData.user.id);
         
-        if (consumerError) {
-          console.error('Error creating consumer profile:', consumerError);
+        if (!success) {
+          console.error('Error creating consumer profile using RPC');
           toast({
             title: "Consumer profile creation failed",
-            description: consumerError.message,
+            description: "Could not create your consumer profile",
             variant: "destructive"
           });
-          throw consumerError;
+          throw new Error("Failed to create consumer profile");
         }
+        
+        console.log('Consumer profile created successfully via RPC');
       } else if (role === 'farmer') {
         // Insert with the current user ID
         const { error: farmerError } = await supabase
@@ -227,6 +226,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: "Account created!",
         description: `You've successfully signed up as a ${role}.`
       });
+      
+      return authData;
     } catch (error: any) {
       console.error('Error signing up:', error.message);
       throw error;
