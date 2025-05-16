@@ -318,7 +318,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_consumer_profile: {
+        Args: { user_id_param: string; location_param: string }
+        Returns: {
+          id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

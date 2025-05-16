@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User, Farmer, Consumer } from '@/types';
@@ -227,7 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: `You've successfully signed up as a ${role}.`
       });
       
-      return authData;
+      // Return void instead of authData to match the interface
     } catch (error: any) {
       console.error('Error signing up:', error.message);
       throw error;
