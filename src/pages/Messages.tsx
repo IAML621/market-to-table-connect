@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -73,7 +72,6 @@ const Messages = () => {
       try {
         console.log('Fetching conversations for user role:', user.role, 'senderId:', senderId);
         
-        // Simplified approach: Get all messages where user is either sender or receiver
         const { data: allMessages, error } = await supabase
           .from('messages')
           .select('*')
@@ -88,7 +86,6 @@ const Messages = () => {
         console.log('All messages:', allMessages);
         
         if (allMessages && allMessages.length > 0) {
-          // Group conversations by the other participant
           const conversationMap = new Map();
           
           for (const msg of allMessages) {
@@ -97,7 +94,7 @@ const Messages = () => {
             if (!conversationMap.has(partnerId)) {
               conversationMap.set(partnerId, {
                 id: partnerId,
-                name: `User ${partnerId.substring(0, 8)}`, // Temporary name
+                name: `User ${partnerId.substring(0, 8)}`,
                 info: '',
                 lastMessage: msg.content,
                 timestamp: msg.timestamp,
@@ -110,30 +107,33 @@ const Messages = () => {
             }
           }
           
-          // Now fetch user details for each partner
           const conversationsArray = Array.from(conversationMap.values());
           
           for (const conv of conversationsArray) {
             try {
-              // Try to get farmer details first
               const { data: farmerData } = await supabase
                 .from('farmers')
-                .select('farm_name, users!inner(username)')
+                .select(`
+                  farm_name,
+                  users!inner(username)
+                `)
                 .eq('id', conv.id)
                 .single();
               
-              if (farmerData) {
+              if (farmerData && farmerData.users) {
                 conv.name = farmerData.users.username;
                 conv.info = farmerData.farm_name;
               } else {
-                // Try to get consumer details
                 const { data: consumerData } = await supabase
                   .from('consumers')
-                  .select('location, users!inner(username)')
+                  .select(`
+                    location,
+                    users!inner(username)
+                  `)
                   .eq('id', conv.id)
                   .single();
                 
-                if (consumerData) {
+                if (consumerData && consumerData.users) {
                   conv.name = consumerData.users.username;
                   conv.info = consumerData.location;
                 }
@@ -145,7 +145,6 @@ const Messages = () => {
           
           setConversations(conversationsArray);
           
-          // Set active conversation
           if (targetFarmerId && conversationMap.has(targetFarmerId)) {
             setActiveConversation(targetFarmerId);
             const farmerData = conversationMap.get(targetFarmerId);
@@ -179,7 +178,6 @@ const Messages = () => {
       try {
         console.log('Fetching messages between:', senderId, 'and', activeConversation);
         
-        // Get all messages between these two users (in either direction)
         const { data, error } = await supabase
           .from('messages')
           .select('*')
@@ -191,7 +189,6 @@ const Messages = () => {
         console.log('Messages data:', data);
         
         if (data) {
-          // Mark unread messages as read
           const unreadMsgIds = data
             .filter(msg => msg.receiver_id === senderId && !msg.is_read)
             .map(msg => msg.id);
@@ -212,7 +209,6 @@ const Messages = () => {
             isRead: msg.is_read
           })));
           
-          // Update conversation name
           const conversation = conversations.find(c => c.id === activeConversation);
           if (conversation) {
             setRecipientName(conversation.name);
@@ -237,40 +233,67 @@ const Messages = () => {
     
     try {
       setSearchLoading(true);
+      console.log('Searching for users with term:', searchTerm, 'User role:', user.role);
       
-      // For consumers, search for farmers
-      // For farmers, search for consumers
       let data = [];
       
-      if (user.role === 'farmer') {
-        const { data: consumerData, error } = await supabase
-          .from('consumers')
-          .select('id, location, users!inner(username)')
-          .ilike('users.username', `%${searchTerm}%`);
-        
-        if (error) throw error;
-        
-        data = consumerData?.map(item => ({
-          id: item.id,
-          name: item.users.username,
-          info: item.location
-        })) || [];
-      } else {
+      if (user.role === 'consumer') {
+        // Consumer searching for farmers
         const { data: farmerData, error } = await supabase
           .from('farmers')
-          .select('id, farm_name, users!inner(username)')
+          .select(`
+            id,
+            farm_name,
+            users!inner(username)
+          `)
           .ilike('users.username', `%${searchTerm}%`);
         
-        if (error) throw error;
+        if (error) {
+          console.error('Error searching farmers:', error);
+          throw error;
+        }
+        
+        console.log('Found farmers:', farmerData);
         
         data = farmerData?.map(item => ({
           id: item.id,
           name: item.users.username,
-          info: item.farm_name
+          info: item.farm_name || 'Farmer'
+        })) || [];
+      } else if (user.role === 'farmer') {
+        // Farmer searching for consumers
+        const { data: consumerData, error } = await supabase
+          .from('consumers')
+          .select(`
+            id,
+            location,
+            users!inner(username)
+          `)
+          .ilike('users.username', `%${searchTerm}%`);
+        
+        if (error) {
+          console.error('Error searching consumers:', error);
+          throw error;
+        }
+        
+        console.log('Found consumers:', consumerData);
+        
+        data = consumerData?.map(item => ({
+          id: item.id,
+          name: item.users.username,
+          info: item.location || 'Consumer'
         })) || [];
       }
       
+      console.log('Setting potential recipients:', data);
       setPotentialRecipients(data);
+      
+      if (data.length === 0) {
+        toast({
+          title: "No users found",
+          description: `No ${user.role === 'consumer' ? 'farmers' : 'consumers'} found matching "${searchTerm}"`
+        });
+      }
     } catch (error) {
       console.error('Error searching for recipients:', error);
       toast({
@@ -307,17 +330,14 @@ const Messages = () => {
       
       if (error) throw error;
       
-      // Close dialog and reset form
       setDialogOpen(false);
       setSearchTerm('');
       setPotentialRecipients([]);
       setSelectedRecipient(null);
       setFirstMessage('');
       
-      // Set the new conversation as active
       setActiveConversation(selectedRecipient);
       
-      // Reload conversations to include new one
       const recipient = potentialRecipients.find(r => r.id === selectedRecipient);
       if (recipient) {
         const newConversation = {
@@ -333,7 +353,6 @@ const Messages = () => {
         setRecipientName(recipient.name);
       }
       
-      // Add new message to messages
       setMessages([{
         id: Date.now().toString(),
         senderId: senderId,
@@ -376,9 +395,8 @@ const Messages = () => {
       
       if (error) throw error;
       
-      // Add to local messages
       setMessages(prev => [...prev, {
-        id: Date.now().toString(), // Temporary ID until refresh
+        id: Date.now().toString(),
         senderId: senderId!,
         receiverId: activeConversation!,
         content: message,
@@ -386,7 +404,6 @@ const Messages = () => {
         isRead: false
       }]);
       
-      // Clear input
       setMessage('');
       
       toast({
@@ -453,23 +470,28 @@ const Messages = () => {
                   <div className="space-y-4 py-4">
                     <div className="flex items-center space-x-2">
                       <Input 
-                        placeholder={`Search for ${user.role === 'farmer' ? 'consumers' : 'farmers'}...`}
+                        placeholder={`Search for ${user.role === 'consumer' ? 'farmers' : 'consumers'}...`}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="flex-1"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            handleSearch();
+                          }
+                        }}
                       />
                       <Button 
                         onClick={handleSearch}
-                        disabled={searchLoading}
+                        disabled={searchLoading || !searchTerm.trim()}
                         className="bg-market-green hover:bg-market-green-dark"
                       >
                         <Search className="h-4 w-4 mr-2" />
-                        Search
+                        {searchLoading ? 'Searching...' : 'Search'}
                       </Button>
                     </div>
                     
                     {potentialRecipients.length > 0 && (
-                      <div className="border rounded-lg overflow-hidden">
+                      <div className="border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
                         {potentialRecipients.map((recipient) => (
                           <div 
                             key={recipient.id}
@@ -517,6 +539,7 @@ const Messages = () => {
               </Dialog>
             </div>
             
+            {/* ... keep existing code (conversations list) */}
             {conversations.length > 0 ? (
               <div>
                 {conversations.map((conversation) => (
