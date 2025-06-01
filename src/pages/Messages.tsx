@@ -46,11 +46,14 @@ const Messages = () => {
   useEffect(() => {
     const fetchUserId = async () => {
       if (user) {
+        console.log('Fetching user ID for role:', user.role);
         if (user.role === 'farmer') {
           const id = await getFarmerId();
+          console.log('Farmer ID:', id);
           setSenderId(id);
         } else if (user.role === 'consumer') {
           const id = await getConsumerId();
+          console.log('Consumer ID:', id);
           setSenderId(id);
         }
       }
@@ -62,175 +65,98 @@ const Messages = () => {
   // Fetch conversations
   useEffect(() => {
     const fetchConversations = async () => {
-      if (!user || !senderId) return;
+      if (!user || !senderId) {
+        console.log('Cannot fetch conversations: user or senderId missing');
+        return;
+      }
       
       try {
-        let query;
+        console.log('Fetching conversations for user role:', user.role, 'senderId:', senderId);
         
-        // For farmers, get messages from consumers
-        // For consumers, get messages from farmers
-        if (user.role === 'farmer') {
-          query = supabase
-            .from('messages')
-            .select(`
-              sender_id,
-              receiver_id,
-              content,
-              timestamp,
-              is_read,
-              consumers!inner (
-                user_id,
-                location,
-                users!inner (
-                  username
-                )
-              )
-            `)
-            .eq('receiver_id', senderId)
-            .order('timestamp', { ascending: false });
-        } else {
-          query = supabase
-            .from('messages')
-            .select(`
-              sender_id,
-              receiver_id,
-              content,
-              timestamp,
-              is_read,
-              farmers!inner (
-                user_id,
-                farm_name,
-                farm_location,
-                users!inner (
-                  username
-                )
-              )
-            `)
-            .eq('receiver_id', senderId)
-            .order('timestamp', { ascending: false });
+        // Simplified approach: Get all messages where user is either sender or receiver
+        const { data: allMessages, error } = await supabase
+          .from('messages')
+          .select('*')
+          .or(`sender_id.eq.${senderId},receiver_id.eq.${senderId}`)
+          .order('timestamp', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching messages:', error);
+          throw error;
         }
         
-        const { data, error } = await query;
+        console.log('All messages:', allMessages);
         
-        if (error) throw error;
-        
-        if (data) {
-          // Process and group conversations by sender
+        if (allMessages && allMessages.length > 0) {
+          // Group conversations by the other participant
           const conversationMap = new Map();
           
-          for (const msg of data) {
-            const partnerId = msg.sender_id;
-            const partnerName = user.role === 'farmer'
-              ? msg.consumers.users.username
-              : msg.farmers.users.username;
-            
-            const partnerInfo = user.role === 'farmer'
-              ? msg.consumers.location
-              : msg.farmers.farm_name;
+          for (const msg of allMessages) {
+            const partnerId = msg.sender_id === senderId ? msg.receiver_id : msg.sender_id;
             
             if (!conversationMap.has(partnerId)) {
               conversationMap.set(partnerId, {
                 id: partnerId,
-                name: partnerName,
-                info: partnerInfo,
+                name: `User ${partnerId.substring(0, 8)}`, // Temporary name
+                info: '',
                 lastMessage: msg.content,
                 timestamp: msg.timestamp,
-                unread: msg.is_read ? 0 : 1
+                unread: msg.receiver_id === senderId && !msg.is_read ? 1 : 0
               });
-            } else if (!msg.is_read) {
+            } else if (msg.receiver_id === senderId && !msg.is_read) {
               const conv = conversationMap.get(partnerId);
               conv.unread = (conv.unread || 0) + 1;
               conversationMap.set(partnerId, conv);
             }
           }
           
-          // Also fetch conversations where the user is the sender
-          let sentQuery;
+          // Now fetch user details for each partner
+          const conversationsArray = Array.from(conversationMap.values());
           
-          if (user.role === 'farmer') {
-            sentQuery = supabase
-              .from('messages')
-              .select(`
-                sender_id,
-                receiver_id,
-                content,
-                timestamp,
-                is_read,
-                consumers!inner (
-                  user_id,
-                  location,
-                  users!inner (
-                    username
-                  )
-                )
-              `)
-              .eq('sender_id', senderId)
-              .order('timestamp', { ascending: false });
-          } else {
-            sentQuery = supabase
-              .from('messages')
-              .select(`
-                sender_id,
-                receiver_id,
-                content,
-                timestamp,
-                is_read,
-                farmers!inner (
-                  user_id,
-                  farm_name,
-                  farm_location,
-                  users!inner (
-                    username
-                  )
-                )
-              `)
-              .eq('sender_id', senderId)
-              .order('timestamp', { ascending: false });
-          }
-          
-          const { data: sentData, error: sentError } = await sentQuery;
-          
-          if (sentError) throw sentError;
-          
-          if (sentData) {
-            for (const msg of sentData) {
-              const partnerId = msg.receiver_id;
-              const partnerName = user.role === 'consumer'
-                ? msg.farmers.users.username
-                : msg.consumers.users.username;
+          for (const conv of conversationsArray) {
+            try {
+              // Try to get farmer details first
+              const { data: farmerData } = await supabase
+                .from('farmers')
+                .select('farm_name, users!inner(username)')
+                .eq('id', conv.id)
+                .single();
               
-              const partnerInfo = user.role === 'consumer'
-                ? msg.farmers.farm_name
-                : msg.consumers.location;
-              
-              if (!conversationMap.has(partnerId)) {
-                conversationMap.set(partnerId, {
-                  id: partnerId,
-                  name: partnerName,
-                  info: partnerInfo,
-                  lastMessage: msg.content,
-                  timestamp: msg.timestamp,
-                  unread: 0
-                });
+              if (farmerData) {
+                conv.name = farmerData.users.username;
+                conv.info = farmerData.farm_name;
+              } else {
+                // Try to get consumer details
+                const { data: consumerData } = await supabase
+                  .from('consumers')
+                  .select('location, users!inner(username)')
+                  .eq('id', conv.id)
+                  .single();
+                
+                if (consumerData) {
+                  conv.name = consumerData.users.username;
+                  conv.info = consumerData.location;
+                }
               }
+            } catch (err) {
+              console.log('Could not fetch user details for:', conv.id);
             }
           }
           
-          setConversations(Array.from(conversationMap.values()));
+          setConversations(conversationsArray);
           
-          // If targetFarmerId is provided, set it as active conversation
+          // Set active conversation
           if (targetFarmerId && conversationMap.has(targetFarmerId)) {
             setActiveConversation(targetFarmerId);
-            // Get farmer name for header
             const farmerData = conversationMap.get(targetFarmerId);
             setRecipientName(farmerData?.name || 'Farmer');
-          } else if (!activeConversation && conversationMap.size > 0) {
-            // Otherwise set first conversation as active
-            const firstId = conversationMap.keys().next().value;
+          } else if (!activeConversation && conversationsArray.length > 0) {
+            const firstId = conversationsArray[0].id;
             setActiveConversation(firstId);
-            const firstConv = conversationMap.get(firstId);
-            setRecipientName(firstConv?.name || 'Conversation');
+            setRecipientName(conversationsArray[0].name);
           }
+        } else {
+          setConversations([]);
         }
       } catch (error) {
         console.error('Error fetching conversations:', error);
@@ -243,7 +169,7 @@ const Messages = () => {
     };
     
     fetchConversations();
-  }, [user, senderId, toast, targetFarmerId, activeConversation, getFarmerId, getConsumerId]);
+  }, [user, senderId, toast, targetFarmerId]);
 
   // Fetch messages for active conversation
   useEffect(() => {
@@ -251,32 +177,22 @@ const Messages = () => {
       if (!activeConversation || !senderId) return;
       
       try {
+        console.log('Fetching messages between:', senderId, 'and', activeConversation);
+        
         // Get all messages between these two users (in either direction)
         const { data, error } = await supabase
           .from('messages')
-          .select(`
-            id,
-            sender_id,
-            receiver_id,
-            content, 
-            timestamp,
-            is_read
-          `)
-          .or(`sender_id.eq.${senderId},receiver_id.eq.${senderId}`)
-          .or(`sender_id.eq.${activeConversation},receiver_id.eq.${activeConversation}`)
+          .select('*')
+          .or(`and(sender_id.eq.${senderId},receiver_id.eq.${activeConversation}),and(sender_id.eq.${activeConversation},receiver_id.eq.${senderId})`)
           .order('timestamp', { ascending: true });
         
         if (error) throw error;
         
+        console.log('Messages data:', data);
+        
         if (data) {
-          // Filter to only include messages between these two specific users
-          const relevantMessages = data.filter(msg => 
-            (msg.sender_id === senderId && msg.receiver_id === activeConversation) || 
-            (msg.sender_id === activeConversation && msg.receiver_id === senderId)
-          );
-          
           // Mark unread messages as read
-          const unreadMsgIds = relevantMessages
+          const unreadMsgIds = data
             .filter(msg => msg.receiver_id === senderId && !msg.is_read)
             .map(msg => msg.id);
           
@@ -287,7 +203,7 @@ const Messages = () => {
               .in('id', unreadMsgIds);
           }
           
-          setMessages(relevantMessages.map(msg => ({
+          setMessages(data.map(msg => ({
             id: msg.id,
             senderId: msg.sender_id,
             receiverId: msg.receiver_id,
@@ -324,52 +240,37 @@ const Messages = () => {
       
       // For consumers, search for farmers
       // For farmers, search for consumers
-      let query;
+      let data = [];
       
       if (user.role === 'farmer') {
-        query = supabase
+        const { data: consumerData, error } = await supabase
           .from('consumers')
-          .select(`
-            id,
-            location,
-            users!inner (
-              username
-            )
-          `)
-          .textSearch('users.username', searchTerm, {
-            type: 'websearch',
-            config: 'english'
-          });
-      } else {
-        query = supabase
-          .from('farmers')
-          .select(`
-            id,
-            farm_name,
-            farm_location,
-            users!inner (
-              username
-            )
-          `)
-          .textSearch('users.username', searchTerm, {
-            type: 'websearch',
-            config: 'english'
-          });
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      
-      if (data) {
-        const formattedResults = data.map(item => ({
+          .select('id, location, users!inner(username)')
+          .ilike('users.username', `%${searchTerm}%`);
+        
+        if (error) throw error;
+        
+        data = consumerData?.map(item => ({
           id: item.id,
           name: item.users.username,
-          info: user.role === 'farmer' ? item.location : item.farm_name
-        }));
+          info: item.location
+        })) || [];
+      } else {
+        const { data: farmerData, error } = await supabase
+          .from('farmers')
+          .select('id, farm_name, users!inner(username)')
+          .ilike('users.username', `%${searchTerm}%`);
         
-        setPotentialRecipients(formattedResults);
+        if (error) throw error;
+        
+        data = farmerData?.map(item => ({
+          id: item.id,
+          name: item.users.username,
+          info: item.farm_name
+        })) || [];
       }
+      
+      setPotentialRecipients(data);
     } catch (error) {
       console.error('Error searching for recipients:', error);
       toast({

@@ -106,6 +106,34 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_messages_receiver_consumers"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "consumers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_messages_receiver_farmers"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "farmers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_messages_sender_consumers"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "consumers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_messages_sender_farmers"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "farmers"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "messages_receiver_id_fkey"
             columns: ["receiver_id"]
             isOneToOne: false
