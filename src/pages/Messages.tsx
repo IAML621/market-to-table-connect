@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { MessageCircle, Send, User, Plus, Search } from 'lucide-react';
+import { MessageCircle, Send, User, Plus, Search, Store, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Message } from '@/types';
 import { 
@@ -17,6 +18,35 @@ import {
   DialogTrigger,
   DialogFooter 
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+interface FarmData {
+  id: string;
+  farm_name: string;
+  username: string;
+  location: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  stock_level: number;
+  image_url?: string;
+}
 
 const Messages = () => {
   const { user, loading, getFarmerId, getConsumerId } = useAuth();
@@ -35,11 +65,16 @@ const Messages = () => {
   
   // New state for new conversation dialog
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [potentialRecipients, setPotentialRecipients] = useState<any[]>([]);
-  const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null);
+  const [selectedFarm, setSelectedFarm] = useState<string>('');
+  const [availableFarms, setAvailableFarms] = useState<FarmData[]>([]);
   const [firstMessage, setFirstMessage] = useState('');
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [farmsLoading, setFarmsLoading] = useState(false);
+  
+  // Product catalog state
+  const [showProducts, setShowProducts] = useState(false);
+  const [selectedFarmProducts, setSelectedFarmProducts] = useState<Product[]>([]);
+  const [selectedFarmName, setSelectedFarmName] = useState<string>('');
+  const [productsLoading, setProductsLoading] = useState(false);
 
   // Fetch user ID based on role
   useEffect(() => {
@@ -60,6 +95,50 @@ const Messages = () => {
     
     fetchUserId();
   }, [user, getFarmerId, getConsumerId]);
+
+  // Fetch available farms
+  useEffect(() => {
+    const fetchFarms = async () => {
+      if (!user || user.role !== 'consumer') return;
+      
+      try {
+        setFarmsLoading(true);
+        const { data: farmsData, error } = await supabase
+          .from('farmers')
+          .select(`
+            id,
+            farm_name,
+            farm_location,
+            users!inner(username)
+          `);
+        
+        if (error) {
+          console.error('Error fetching farms:', error);
+          return;
+        }
+        
+        const farms: FarmData[] = farmsData?.map(farm => ({
+          id: farm.id,
+          farm_name: farm.farm_name || 'Unnamed Farm',
+          username: farm.users?.username || 'Unknown',
+          location: farm.farm_location || 'Unknown location'
+        })) || [];
+        
+        setAvailableFarms(farms);
+      } catch (error) {
+        console.error('Error fetching farms:', error);
+        toast({
+          variant: "destructive",
+          title: "Failed to load farms",
+          description: "Please try again later."
+        });
+      } finally {
+        setFarmsLoading(false);
+      }
+    };
+    
+    fetchFarms();
+  }, [user, toast]);
   
   // Fetch conversations
   useEffect(() => {
@@ -227,92 +306,43 @@ const Messages = () => {
     fetchMessages();
   }, [activeConversation, senderId, conversations, toast]);
 
-  // Search for potential recipients
-  const handleSearch = async () => {
-    if (!senderId || !searchTerm.trim() || !user) return;
-    
+  // Fetch products for selected farm
+  const fetchFarmProducts = async (farmId: string, farmName: string) => {
     try {
-      setSearchLoading(true);
-      console.log('Searching for users with term:', searchTerm, 'User role:', user.role);
+      setProductsLoading(true);
+      const { data: products, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('farmer_id', farmId)
+        .gt('stock_level', 0);
       
-      let data = [];
-      
-      if (user.role === 'consumer') {
-        // Consumer searching for farmers
-        const { data: farmerData, error } = await supabase
-          .from('farmers')
-          .select(`
-            id,
-            farm_name,
-            users!inner(username)
-          `)
-          .ilike('users.username', `%${searchTerm}%`);
-        
-        if (error) {
-          console.error('Error searching farmers:', error);
-          throw error;
-        }
-        
-        console.log('Found farmers:', farmerData);
-        
-        data = farmerData?.map(item => ({
-          id: item.id,
-          name: item.users.username,
-          info: item.farm_name || 'Farmer'
-        })) || [];
-      } else if (user.role === 'farmer') {
-        // Farmer searching for consumers
-        const { data: consumerData, error } = await supabase
-          .from('consumers')
-          .select(`
-            id,
-            location,
-            users!inner(username)
-          `)
-          .ilike('users.username', `%${searchTerm}%`);
-        
-        if (error) {
-          console.error('Error searching consumers:', error);
-          throw error;
-        }
-        
-        console.log('Found consumers:', consumerData);
-        
-        data = consumerData?.map(item => ({
-          id: item.id,
-          name: item.users.username,
-          info: item.location || 'Consumer'
-        })) || [];
+      if (error) {
+        console.error('Error fetching products:', error);
+        throw error;
       }
       
-      console.log('Setting potential recipients:', data);
-      setPotentialRecipients(data);
-      
-      if (data.length === 0) {
-        toast({
-          title: "No users found",
-          description: `No ${user.role === 'consumer' ? 'farmers' : 'consumers'} found matching "${searchTerm}"`
-        });
-      }
+      setSelectedFarmProducts(products || []);
+      setSelectedFarmName(farmName);
+      setShowProducts(true);
     } catch (error) {
-      console.error('Error searching for recipients:', error);
+      console.error('Error fetching farm products:', error);
       toast({
         variant: "destructive",
-        title: "Search failed",
+        title: "Failed to load products",
         description: "Please try again later."
       });
     } finally {
-      setSearchLoading(false);
+      setProductsLoading(false);
     }
   };
 
   // Start new conversation
   const startNewConversation = async () => {
-    if (!selectedRecipient || !firstMessage.trim() || !senderId) {
+    if (!selectedFarm || !firstMessage.trim() || !senderId) {
       toast({
         variant: "destructive",
         title: "Missing information",
-        description: "Please select a recipient and enter a message."
+        description: "Please select a farm and enter a message."
       });
       return;
     }
@@ -320,7 +350,7 @@ const Messages = () => {
     try {
       const newMessage = {
         sender_id: senderId,
-        receiver_id: selectedRecipient,
+        receiver_id: selectedFarm,
         content: firstMessage,
         timestamp: new Date().toISOString(),
         is_read: false
@@ -331,32 +361,30 @@ const Messages = () => {
       if (error) throw error;
       
       setDialogOpen(false);
-      setSearchTerm('');
-      setPotentialRecipients([]);
-      setSelectedRecipient(null);
+      setSelectedFarm('');
       setFirstMessage('');
       
-      setActiveConversation(selectedRecipient);
+      setActiveConversation(selectedFarm);
       
-      const recipient = potentialRecipients.find(r => r.id === selectedRecipient);
-      if (recipient) {
+      const farm = availableFarms.find(f => f.id === selectedFarm);
+      if (farm) {
         const newConversation = {
-          id: selectedRecipient,
-          name: recipient.name,
-          info: recipient.info,
+          id: selectedFarm,
+          name: farm.username,
+          info: farm.farm_name,
           lastMessage: firstMessage,
           timestamp: new Date().toISOString(),
           unread: 0
         };
         
         setConversations(prev => [newConversation, ...prev]);
-        setRecipientName(recipient.name);
+        setRecipientName(farm.username);
       }
       
       setMessages([{
         id: Date.now().toString(),
         senderId: senderId,
-        receiverId: selectedRecipient,
+        receiverId: selectedFarm,
         content: firstMessage,
         timestamp: new Date().toISOString(),
         isRead: false
@@ -448,6 +476,42 @@ const Messages = () => {
     <div className="max-w-4xl mx-auto pt-6 pb-16">
       <h1 className="text-2xl font-bold mb-6">Messages</h1>
 
+      {/* Product Catalog Dialog */}
+      <Dialog open={showProducts} onOpenChange={setShowProducts}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedFarmName} - Product Catalog</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 py-4">
+            {productsLoading ? (
+              <p>Loading products...</p>
+            ) : selectedFarmProducts.length > 0 ? (
+              selectedFarmProducts.map((product) => (
+                <Card key={product.id} className="overflow-hidden">
+                  <CardContent className="p-4">
+                    {product.image_url && (
+                      <img 
+                        src={product.image_url} 
+                        alt={product.name}
+                        className="w-full h-32 object-cover rounded-md mb-3"
+                      />
+                    )}
+                    <h3 className="font-semibold text-lg mb-2">{product.name}</h3>
+                    <p className="text-sm text-muted-foreground mb-2">{product.category}</p>
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg font-bold text-market-green">${product.price}</span>
+                      <span className="text-sm text-muted-foreground">{product.stock_level} in stock</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <p>No products available for this farm.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="border shadow-sm overflow-hidden">
         <div className="grid md:grid-cols-3 h-[600px]">
           {/* Conversation List */}
@@ -457,89 +521,108 @@ const Messages = () => {
                 placeholder="Search conversations..." 
                 className="mr-2"
               />
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="icon" className="bg-market-green hover:bg-market-green-dark" aria-label="New conversation">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Start a new conversation</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="flex items-center space-x-2">
-                      <Input 
-                        placeholder={`Search for ${user.role === 'consumer' ? 'farmers' : 'consumers'}...`}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="flex-1"
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handleSearch();
-                          }
-                        }}
-                      />
+              {user?.role === 'consumer' && (
+                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="icon" className="bg-market-green hover:bg-market-green-dark" aria-label="New conversation">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Start a new conversation</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Select a Farm</label>
+                        <Select value={selectedFarm} onValueChange={setSelectedFarm}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a farm to contact..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-background border shadow-lg z-50">
+                            {farmsLoading ? (
+                              <SelectItem value="loading" disabled>Loading farms...</SelectItem>
+                            ) : availableFarms.length > 0 ? (
+                              availableFarms.map((farm) => (
+                                <SelectItem key={farm.id} value={farm.id}>
+                                  <div className="flex items-center justify-between w-full">
+                                    <div>
+                                      <div className="font-medium">{farm.farm_name}</div>
+                                      <div className="text-sm text-muted-foreground">by {farm.username}</div>
+                                    </div>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="sm" className="ml-2">
+                                          <Store className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent className="bg-background border shadow-lg z-50">
+                                        <DropdownMenuItem 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            fetchFarmProducts(farm.id, farm.farm_name);
+                                          }}
+                                        >
+                                          <Eye className="h-4 w-4 mr-2" />
+                                          View Products
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="no-farms" disabled>No farms available</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        {selectedFarm && (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const farm = availableFarms.find(f => f.id === selectedFarm);
+                                if (farm) fetchFarmProducts(farm.id, farm.farm_name);
+                              }}
+                              className="flex items-center gap-1"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View Products
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Message</label>
+                        <Input
+                          placeholder="Type your first message..."
+                          value={firstMessage}
+                          onChange={(e) => setFirstMessage(e.target.value)}
+                          disabled={!selectedFarm}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                        Cancel
+                      </Button>
                       <Button 
-                        onClick={handleSearch}
-                        disabled={searchLoading || !searchTerm.trim()}
+                        onClick={startNewConversation}
+                        disabled={!selectedFarm || !firstMessage.trim()}
                         className="bg-market-green hover:bg-market-green-dark"
                       >
-                        <Search className="h-4 w-4 mr-2" />
-                        {searchLoading ? 'Searching...' : 'Search'}
+                        Start Conversation
                       </Button>
-                    </div>
-                    
-                    {potentialRecipients.length > 0 && (
-                      <div className="border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
-                        {potentialRecipients.map((recipient) => (
-                          <div 
-                            key={recipient.id}
-                            className={`flex items-center p-3 gap-3 cursor-pointer hover:bg-secondary/50 border-b last:border-0 ${
-                              selectedRecipient === recipient.id ? 'bg-secondary' : ''
-                            }`}
-                            onClick={() => setSelectedRecipient(recipient.id)}
-                          >
-                            <div className="rounded-full bg-primary/10 h-8 w-8 flex items-center justify-center">
-                              <User className="h-4 w-4 text-primary" />
-                            </div>
-                            <div>
-                              <h3 className="font-medium">{recipient.name}</h3>
-                              <p className="text-xs text-muted-foreground">{recipient.info}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Message</label>
-                      <Input
-                        placeholder="Type your first message..."
-                        value={firstMessage}
-                        onChange={(e) => setFirstMessage(e.target.value)}
-                        disabled={!selectedRecipient}
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={startNewConversation}
-                      disabled={!selectedRecipient || !firstMessage.trim()}
-                      className="bg-market-green hover:bg-market-green-dark"
-                    >
-                      Start Conversation
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
             </div>
             
-            {/* ... keep existing code (conversations list) */}
+            {/* Conversations list */}
             {conversations.length > 0 ? (
               <div>
                 {conversations.map((conversation) => (
