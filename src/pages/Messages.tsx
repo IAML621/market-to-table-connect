@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -143,19 +142,52 @@ const Messages = () => {
   // Set up initial conversation when farmerId is provided
   useEffect(() => {
     const setupInitialConversation = async () => {
-      if (targetFarmerId && availableFarms.length > 0) {
+      if (targetFarmerId && availableFarms.length > 0 && senderId) {
+        console.log('Setting up conversation with farmerId:', targetFarmerId);
+        
         // Find the farmer by farmer ID and get their user ID
         const targetFarm = availableFarms.find(farm => farm.id === targetFarmerId);
         if (targetFarm) {
-          console.log('Setting up conversation with farmer:', targetFarm);
-          setActiveConversation(targetFarm.user_id);
-          setRecipientName(targetFarm.farm_name);
+          console.log('Found target farm:', targetFarm);
+          
+          // Check if conversation already exists
+          const existingConversation = conversations.find(conv => conv.id === targetFarm.user_id);
+          
+          if (existingConversation) {
+            // Conversation exists, just select it
+            console.log('Existing conversation found, selecting it');
+            setActiveConversation(targetFarm.user_id);
+            setRecipientName(targetFarm.farm_name);
+          } else {
+            // No existing conversation, create a new one
+            console.log('No existing conversation, creating new one');
+            setActiveConversation(targetFarm.user_id);
+            setRecipientName(targetFarm.farm_name);
+            
+            // Add to conversations list if not already there
+            const newConversation = {
+              id: targetFarm.user_id,
+              name: targetFarm.farm_name,
+              info: `by ${targetFarm.username} • ${targetFarm.location}`,
+              lastMessage: '',
+              timestamp: new Date().toISOString(),
+              unread: 0
+            };
+            
+            setConversations(prev => {
+              const exists = prev.find(conv => conv.id === targetFarm.user_id);
+              if (!exists) {
+                return [newConversation, ...prev];
+              }
+              return prev;
+            });
+          }
         }
       }
     };
     
     setupInitialConversation();
-  }, [targetFarmerId, availableFarms]);
+  }, [targetFarmerId, availableFarms, senderId, conversations]);
   
   // Fetch conversations
   useEffect(() => {
