@@ -119,7 +119,7 @@ const Messages = () => {
         const farms: FarmData[] = farmsData?.map(farm => ({
           id: farm.id,
           farm_name: farm.farm_name || 'Unnamed Farm',
-          username: farm.users?.username || 'Unknown',
+          username: (farm.users as any)?.username || 'Unknown',
           location: farm.farm_location || 'Unknown location'
         })) || [];
         
@@ -198,8 +198,8 @@ const Messages = () => {
                 .eq('id', conv.id)
                 .single();
               
-              if (farmerData && farmerData.users) {
-                conv.name = farmerData.users.username;
+              if (farmerData && (farmerData.users as any)) {
+                conv.name = (farmerData.users as any).username;
                 conv.info = farmerData.farm_name;
               } else {
                 const { data: consumerData } = await supabase
@@ -211,8 +211,8 @@ const Messages = () => {
                   .eq('id', conv.id)
                   .single();
                 
-                if (consumerData && consumerData.users) {
-                  conv.name = consumerData.users.username;
+                if (consumerData && (consumerData.users as any)) {
+                  conv.name = (consumerData.users as any).username;
                   conv.info = consumerData.location;
                 }
               }
@@ -549,24 +549,6 @@ const Messages = () => {
                                       <div className="font-medium">{farm.farm_name}</div>
                                       <div className="text-sm text-muted-foreground">by {farm.username}</div>
                                     </div>
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="sm" className="ml-2">
-                                          <Store className="h-4 w-4" />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent className="bg-background border shadow-lg z-50">
-                                        <DropdownMenuItem 
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            fetchFarmProducts(farm.id, farm.farm_name);
-                                          }}
-                                        >
-                                          <Eye className="h-4 w-4 mr-2" />
-                                          View Products
-                                        </DropdownMenuItem>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
                                   </div>
                                 </SelectItem>
                               ))
@@ -621,7 +603,6 @@ const Messages = () => {
               )}
             </div>
             
-            {/* Conversations list */}
             {conversations.length > 0 ? (
               <div>
                 {conversations.map((conversation) => (

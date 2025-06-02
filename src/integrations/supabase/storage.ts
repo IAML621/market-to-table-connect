@@ -78,21 +78,23 @@ export const ensureFarmerRecordExists = async (userId: string): Promise<boolean>
     if (!existingFarmer) {
       console.log('No farmer record found, creating one...');
       
-      // Insert with the current user ID
-      const { error: insertError } = await supabase
+      // Insert with the current user ID - should work now with RLS policies
+      const { data: newFarmer, error: insertError } = await supabase
         .from('farmers')
         .insert({
           user_id: userId,
           farm_name: '', // Empty default value
           farm_location: '', // Empty default value
-        });
+        })
+        .select()
+        .single();
         
       if (insertError) {
         console.error('Error creating farmer record:', insertError);
         return false;
       }
       
-      console.log('Farmer record created successfully');
+      console.log('Farmer record created successfully:', newFarmer);
       return true;
     } else {
       console.log('Farmer record already exists');
