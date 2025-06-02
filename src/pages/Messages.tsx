@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -27,6 +28,7 @@ import {
 
 interface FarmData {
   id: string;
+  user_id: string;
   farm_name: string;
   username: string;
   location: string;
@@ -50,7 +52,7 @@ const Messages = () => {
   const targetFarmerId = params.get('farmerId');
   
   const [conversations, setConversations] = useState<any[]>([]);
-  const [activeConversation, setActiveConversation] = useState<string | null>(targetFarmerId);
+  const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [recipientName, setRecipientName] = useState<string>('');
@@ -89,7 +91,7 @@ const Messages = () => {
     fetchUserId();
   }, [user, getFarmerId, getConsumerId]);
 
-  // Fetch available farms
+  // Fetch available farms with user_id mapping
   useEffect(() => {
     const fetchFarms = async () => {
       if (!user || user.role !== 'consumer') return;
@@ -100,6 +102,7 @@ const Messages = () => {
           .from('farmers')
           .select(`
             id,
+            user_id,
             farm_name,
             farm_location,
             users!inner(username)
@@ -114,6 +117,7 @@ const Messages = () => {
         
         const farms: FarmData[] = farmsData?.map(farm => ({
           id: farm.id,
+          user_id: farm.user_id,
           farm_name: farm.farm_name || 'Unnamed Farm',
           username: (farm.users as any)?.username || 'Unknown',
           location: farm.farm_location || 'Unknown location'
@@ -135,6 +139,23 @@ const Messages = () => {
     
     fetchFarms();
   }, [user, toast]);
+
+  // Set up initial conversation when farmerId is provided
+  useEffect(() => {
+    const setupInitialConversation = async () => {
+      if (targetFarmerId && availableFarms.length > 0) {
+        // Find the farmer by farmer ID and get their user ID
+        const targetFarm = availableFarms.find(farm => farm.id === targetFarmerId);
+        if (targetFarm) {
+          console.log('Setting up conversation with farmer:', targetFarm);
+          setActiveConversation(targetFarm.user_id);
+          setRecipientName(targetFarm.farm_name);
+        }
+      }
+    };
+    
+    setupInitialConversation();
+  }, [targetFarmerId, availableFarms]);
   
   // Fetch conversations
   useEffect(() => {
@@ -192,12 +213,12 @@ const Messages = () => {
                   farm_name,
                   users!inner(username)
                 `)
-                .eq('id', conv.id)
+                .eq('user_id', conv.id)
                 .single();
               
               if (farmerData && (farmerData.users as any)) {
-                conv.name = (farmerData.users as any).username;
-                conv.info = farmerData.farm_name;
+                conv.name = farmerData.farm_name || (farmerData.users as any).username;
+                conv.info = `by ${(farmerData.users as any).username}`;
               } else {
                 const { data: consumerData } = await supabase
                   .from('consumers')
@@ -205,7 +226,7 @@ const Messages = () => {
                     location,
                     users!inner(username)
                   `)
-                  .eq('id', conv.id)
+                  .eq('user_id', conv.id)
                   .single();
                 
                 if (consumerData && (consumerData.users as any)) {
@@ -220,11 +241,7 @@ const Messages = () => {
           
           setConversations(conversationsArray);
           
-          if (targetFarmerId && conversationMap.has(targetFarmerId)) {
-            setActiveConversation(targetFarmerId);
-            const farmerData = conversationMap.get(targetFarmerId);
-            setRecipientName(farmerData?.name || 'Farmer');
-          } else if (!activeConversation && conversationsArray.length > 0) {
+          if (!activeConversation && conversationsArray.length > 0) {
             const firstId = conversationsArray[0].id;
             setActiveConversation(firstId);
             setRecipientName(conversationsArray[0].name);
@@ -243,7 +260,7 @@ const Messages = () => {
     };
     
     fetchConversations();
-  }, [user, senderId, toast, targetFarmerId]);
+  }, [user, senderId, toast, activeConversation]);
 
   // Fetch messages for active conversation
   useEffect(() => {
@@ -344,13 +361,26 @@ const Messages = () => {
     }
     
     try {
+      // Find the selected farm to get the user_id
+      const farm = availableFarms.find(f => f.id === selectedFarm);
+      if (!farm) {
+        toast({
+          variant: "destructive",
+          title: "Farm not found",
+          description: "Selected farm could not be found."
+        });
+        return;
+      }
+
       const newMessage = {
         sender_id: senderId,
-        receiver_id: selectedFarm,
+        receiver_id: farm.user_id, // Use the farmer's user_id, not farmer_id
         content: firstMessage,
         timestamp: new Date().toISOString(),
         is_read: false
       };
+      
+      console.log('Sending message:', newMessage);
       
       const { error } = await supabase.from('messages').insert(newMessage);
       
@@ -360,27 +390,24 @@ const Messages = () => {
       setSelectedFarm('');
       setFirstMessage('');
       
-      setActiveConversation(selectedFarm);
+      setActiveConversation(farm.user_id);
       
-      const farm = availableFarms.find(f => f.id === selectedFarm);
-      if (farm) {
-        const newConversation = {
-          id: selectedFarm,
-          name: farm.username,
-          info: farm.farm_name,
-          lastMessage: firstMessage,
-          timestamp: new Date().toISOString(),
-          unread: 0
-        };
-        
-        setConversations(prev => [newConversation, ...prev]);
-        setRecipientName(farm.username);
-      }
+      const newConversation = {
+        id: farm.user_id,
+        name: farm.farm_name,
+        info: `by ${farm.username}`,
+        lastMessage: firstMessage,
+        timestamp: new Date().toISOString(),
+        unread: 0
+      };
+      
+      setConversations(prev => [newConversation, ...prev]);
+      setRecipientName(farm.farm_name);
       
       setMessages([{
         id: Date.now().toString(),
         senderId: senderId,
-        receiverId: selectedFarm,
+        receiverId: farm.user_id,
         content: firstMessage,
         timestamp: new Date().toISOString(),
         isRead: false
@@ -414,6 +441,8 @@ const Messages = () => {
         timestamp: new Date().toISOString(),
         is_read: false
       };
+      
+      console.log('Sending message:', newMessage);
       
       const { error } = await supabase.from('messages').insert(newMessage);
       
@@ -625,6 +654,12 @@ const Messages = () => {
                       <p className="text-sm text-muted-foreground truncate">
                         {conversation.lastMessage}
                       </p>
+                      
+                      {conversation.info && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {conversation.info}
+                        </p>
+                      )}
                     </div>
                     
                     {conversation.unread > 0 && (
