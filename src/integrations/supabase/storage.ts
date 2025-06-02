@@ -56,7 +56,7 @@ export const ensureConsumerRecordExists = async (userId: string, location: strin
  * Ensures that a farmer record exists for the given user ID
  * This function is used during registration and when accessing pages that require a farmer profile
  */
-export const ensureFarmerRecordExists = async (userId: string): Promise<boolean> => {
+export const ensureFarmerRecordExists = async (userId: string, farmName: string = '', farmLocation: string = ''): Promise<boolean> => {
   if (!userId) return false;
   
   try {
@@ -78,13 +78,13 @@ export const ensureFarmerRecordExists = async (userId: string): Promise<boolean>
     if (!existingFarmer) {
       console.log('No farmer record found, creating one...');
       
-      // Insert with the current user ID - should work now with RLS policies
+      // Insert with the current user ID and provided farm details
       const { data: newFarmer, error: insertError } = await supabase
         .from('farmers')
         .insert({
           user_id: userId,
-          farm_name: '', // Empty default value
-          farm_location: '', // Empty default value
+          farm_name: farmName || '', // Use provided farm name or empty default
+          farm_location: farmLocation || '', // Use provided farm location or empty default
         })
         .select()
         .single();

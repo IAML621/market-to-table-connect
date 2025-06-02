@@ -4,7 +4,9 @@ import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Product } from '@/types';
 import { useCart } from '@/contexts/CartContext';
-import { ShoppingBag } from 'lucide-react';
+import { ShoppingBag, MessageCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ProductCardProps {
   product: Product;
@@ -13,10 +15,21 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick }) => {
   const { addToCart } = useCart();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     addToCart(product, 1);
+  };
+
+  const handleMessageFarm = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) {
+      navigate(`/login?redirect=/products/${product.id}`);
+      return;
+    }
+    navigate(`/messages?farmerId=${product.farmerId}`);
   };
 
   return (
@@ -69,13 +82,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick }) =>
         </div>
       </CardContent>
       
-      <CardFooter className="p-3 pt-0">
+      <CardFooter className="p-3 pt-0 space-y-2">
         <Button
           className="w-full bg-market-green hover:bg-market-green-dark text-white"
           disabled={product.stockLevel <= 0}
           onClick={handleAddToCart}
         >
           Add to Cart
+        </Button>
+        
+        <Button
+          variant="outline"
+          className="w-full flex items-center gap-2"
+          onClick={handleMessageFarm}
+        >
+          <MessageCircle className="h-4 w-4" />
+          Message Farm
         </Button>
       </CardFooter>
     </Card>

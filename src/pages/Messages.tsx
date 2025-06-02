@@ -24,12 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 interface FarmData {
   id: string;
@@ -116,6 +110,8 @@ const Messages = () => {
           return;
         }
         
+        console.log('Fetched farms data:', farmsData);
+        
         const farms: FarmData[] = farmsData?.map(farm => ({
           id: farm.id,
           farm_name: farm.farm_name || 'Unnamed Farm',
@@ -123,6 +119,7 @@ const Messages = () => {
           location: farm.farm_location || 'Unknown location'
         })) || [];
         
+        console.log('Processed farms:', farms);
         setAvailableFarms(farms);
       } catch (error) {
         console.error('Error fetching farms:', error);
@@ -498,7 +495,7 @@ const Messages = () => {
                     <h3 className="font-semibold text-lg mb-2">{product.name}</h3>
                     <p className="text-sm text-muted-foreground mb-2">{product.category}</p>
                     <div className="flex justify-between items-center">
-                      <span className="text-lg font-bold text-market-green">${product.price}</span>
+                      <span className="text-lg font-bold text-market-green">BWP {product.price}</span>
                       <span className="text-sm text-muted-foreground">{product.stock_level} in stock</span>
                     </div>
                   </CardContent>
@@ -547,7 +544,7 @@ const Messages = () => {
                                   <div className="flex items-center justify-between w-full">
                                     <div>
                                       <div className="font-medium">{farm.farm_name}</div>
-                                      <div className="text-sm text-muted-foreground">by {farm.username}</div>
+                                      <div className="text-sm text-muted-foreground">by {farm.username} • {farm.location}</div>
                                     </div>
                                   </div>
                                 </SelectItem>
