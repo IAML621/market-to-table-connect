@@ -24,6 +24,16 @@ const Checkout = () => {
   const [contactNumber, setContactNumber] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
 
+  // Calculate delivery fee based on order value
+  const calculateDeliveryFee = () => {
+    if (totalPrice >= 100) return 0; // Free delivery for orders over BWP 100
+    if (totalPrice >= 50) return 15; // BWP 15 for orders over BWP 50
+    return 25; // BWP 25 for smaller orders
+  };
+
+  const deliveryFee = calculateDeliveryFee();
+  const finalTotal = totalPrice + deliveryFee;
+
   // Redirect if cart is empty
   if (items.length === 0) {
     navigate('/cart');
@@ -75,7 +85,7 @@ const Checkout = () => {
         .insert({
           consumer_id: consumerData.id,
           order_date: new Date().toISOString(),
-          total_price: totalPrice,
+          total_price: finalTotal,
           status: 'pending'
         })
         .select()
@@ -101,16 +111,33 @@ const Checkout = () => {
         throw new Error('Failed to create order items');
       }
 
+      // Create Stripe checkout session
+      const { data: stripeData, error: stripeError } = await supabase.functions.invoke('create-payment', {
+        body: {
+          orderId: orderData.id,
+          amount: Math.round(finalTotal * 100), // Convert to cents
+          currency: 'bwp',
+          orderItems: items.map(item => ({
+            name: item.productName,
+            quantity: item.quantity,
+            price: item.pricePerItem
+          })),
+          deliveryFee: deliveryFee,
+          deliveryAddress: deliveryAddress,
+          contactNumber: contactNumber,
+          orderNotes: orderNotes
+        }
+      });
+
+      if (stripeError) {
+        throw new Error('Failed to create payment session');
+      }
+
       // Clear the cart
       clearCart();
 
-      toast({
-        title: "Order Placed Successfully!",
-        description: `Your order #${orderData.id.slice(0, 8)} has been placed`,
-      });
-
-      // Navigate to a success page or back to home
-      navigate('/', { replace: true });
+      // Redirect to Stripe Checkout
+      window.location.href = stripeData.url;
 
     } catch (error) {
       console.error('Order placement error:', error);
@@ -233,15 +260,24 @@ const Checkout = () => {
               </div>
               <div className="flex justify-between">
                 <span>Delivery Fee</span>
-                <span>To be calculated</span>
+                <span className="text-sm">
+                  {deliveryFee === 0 ? (
+                    <span className="text-green-600">Free</span>
+                  ) : (
+                    `BWP ${deliveryFee.toFixed(2)}`
+                  )}
+                </span>
               </div>
+              {deliveryFee === 0 && (
+                <p className="text-xs text-green-600">Free delivery on orders over BWP 100!</p>
+              )}
             </div>
             
             <Separator className="my-4" />
             
             <div className="flex justify-between font-semibold text-lg mb-6">
               <span>Total</span>
-              <span>BWP {totalPrice.toFixed(2)}</span>
+              <span>BWP {finalTotal.toFixed(2)}</span>
             </div>
             
             <Button
@@ -250,12 +286,11 @@ const Checkout = () => {
               disabled={isLoading}
             >
               <CreditCard className="h-4 w-4 mr-2" />
-              {isLoading ? 'Placing Order...' : 'Place Order'}
+              {isLoading ? 'Processing...' : 'Pay with Stripe'}
             </Button>
             
             <p className="text-xs text-muted-foreground text-center mt-4">
-              By placing this order, you agree to our terms and conditions.
-              Payment will be arranged directly with the farmer.
+              You will be redirected to Stripe to complete your payment securely.
             </p>
           </Card>
         </div>
