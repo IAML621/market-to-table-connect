@@ -68,6 +68,8 @@ const Checkout = () => {
     setIsLoading(true);
 
     try {
+      console.log('Starting order placement process...');
+      
       // Get consumer ID
       const { data: consumerData, error: consumerError } = await supabase
         .from('consumers')
@@ -76,8 +78,11 @@ const Checkout = () => {
         .single();
 
       if (consumerError) {
+        console.error('Consumer lookup error:', consumerError);
         throw new Error('Failed to find consumer profile');
       }
+
+      console.log('Consumer found:', consumerData);
 
       // Create the order
       const { data: orderData, error: orderError } = await supabase
@@ -92,8 +97,11 @@ const Checkout = () => {
         .single();
 
       if (orderError) {
+        console.error('Order creation error:', orderError);
         throw new Error('Failed to create order');
       }
+
+      console.log('Order created:', orderData);
 
       // Create order items
       const orderItems = items.map(item => ({
@@ -108,10 +116,14 @@ const Checkout = () => {
         .insert(orderItems);
 
       if (itemsError) {
+        console.error('Order items creation error:', itemsError);
         throw new Error('Failed to create order items');
       }
 
+      console.log('Order items created successfully');
+
       // Create Stripe checkout session
+      console.log('Creating Stripe checkout session...');
       const { data: stripeData, error: stripeError } = await supabase.functions.invoke('create-payment', {
         body: {
           orderId: orderData.id,
@@ -130,20 +142,28 @@ const Checkout = () => {
       });
 
       if (stripeError) {
-        throw new Error('Failed to create payment session');
+        console.error('Stripe session creation error:', stripeError);
+        throw new Error(`Failed to create payment session: ${stripeError.message}`);
+      }
+
+      console.log('Stripe session created:', stripeData);
+
+      if (!stripeData?.url) {
+        throw new Error('No payment URL received from Stripe');
       }
 
       // Clear the cart
       clearCart();
 
       // Redirect to Stripe Checkout
+      console.log('Redirecting to Stripe checkout...');
       window.location.href = stripeData.url;
 
     } catch (error) {
       console.error('Order placement error:', error);
       toast({
         title: "Order Failed",
-        description: error instanceof Error ? error.message : "Failed to place order",
+        description: error instanceof Error ? error.message : "Failed to place order. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -152,7 +172,7 @@ const Checkout = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto pt-6 pb-16">
+    <div className="max-w-4xl mx-auto pt-6 pb-16 px-4">
       <div className="flex items-center gap-4 mb-6">
         <Button
           variant="ghost"
