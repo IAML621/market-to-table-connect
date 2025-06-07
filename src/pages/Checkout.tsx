@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '@/contexts/CartContext';
@@ -70,25 +69,22 @@ const Checkout = () => {
     try {
       console.log('Starting order placement process...');
       
-      // Get consumer ID
+      // Get consumer ID using the new database function
       const { data: consumerData, error: consumerError } = await supabase
-        .from('consumers')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
+        .rpc('get_user_consumer_id');
 
-      if (consumerError) {
+      if (consumerError || !consumerData) {
         console.error('Consumer lookup error:', consumerError);
-        throw new Error('Failed to find consumer profile');
+        throw new Error('Failed to find consumer profile. Please make sure you have a complete profile.');
       }
 
-      console.log('Consumer found:', consumerData);
+      console.log('Consumer ID found:', consumerData);
 
       // Create the order
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert({
-          consumer_id: consumerData.id,
+          consumer_id: consumerData,
           order_date: new Date().toISOString(),
           total_price: finalTotal,
           status: 'pending'

@@ -352,6 +352,10 @@ export type Database = {
           id: string
         }[]
       }
+      get_user_consumer_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
