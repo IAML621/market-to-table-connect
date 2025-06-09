@@ -8,7 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from "@/components/ui/switch"
 import { useToast } from '@/hooks/use-toast';
-import { ensureFarmerRecordExists, uploadProductImage } from '@/integrations/supabase/storage';
+import { supabase } from '@/lib/supabase';
+import { uploadProductImage } from '@/integrations/supabase/storage';
 
 const AddProduct = () => {
   const [name, setName] = useState('');
@@ -67,21 +68,19 @@ const AddProduct = () => {
 
       let productImageUrl = null;
       if (image) {
+        console.log('Uploading product image...');
         productImageUrl = await uploadProductImage(image, farmerId);
         if (!productImageUrl) {
           setError('Failed to upload product image.');
           setLoading(false);
           return;
         }
+        console.log('Image uploaded successfully:', productImageUrl);
       }
 
-      // Create the product
-      const response = await fetch('/api/create-product', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Create the product using the edge function
+      const { data, error } = await supabase.functions.invoke('create-product', {
+        body: {
           name,
           description,
           price: parseFloat(price),
@@ -91,24 +90,23 @@ const AddProduct = () => {
           category,
           unit,
           isOrganic,
-        }),
+        },
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (error) {
+        console.error('Product creation error:', error);
+        setError(error.message || 'Failed to add product.');
+        toast({
+          title: "Product creation failed",
+          description: error.message || "There was a problem creating your product",
+          variant: "destructive"
+        });
+      } else {
         toast({
           title: "Product added",
           description: "Your product has been added successfully"
         });
         navigate('/products'); // Redirect to products page
-      } else {
-        setError(data.message || 'Failed to add product.');
-        toast({
-          title: "Product creation failed",
-          description: data.message || "There was a problem creating your product",
-          variant: "destructive"
-        });
       }
     } catch (err: any) {
       console.error('Error adding product:', err);
