@@ -35,9 +35,59 @@ serve(async (req) => {
       )
     }
 
+    console.log('Authenticated user:', user.id)
+
     const { name, description, price, stockLevel, farmerId, imageUrl, category, unit, isOrganic } = await req.json()
 
+    console.log('Received farmer ID:', farmerId)
+
+    // First verify that the farmer exists and belongs to the current user
+    const { data: farmer, error: farmerError } = await supabaseClient
+      .from('farmers')
+      .select('id, user_id')
+      .eq('id', farmerId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (farmerError || !farmer) {
+      console.error('Farmer verification error:', farmerError)
+      console.log('No farmer found for ID:', farmerId, 'and user ID:', user.id)
+      
+      // Try to create a farmer record if it doesn't exist
+      console.log('Attempting to create farmer record...')
+      const { data: newFarmer, error: createFarmerError } = await supabaseClient
+        .from('farmers')
+        .insert({
+          user_id: user.id,
+          farm_name: 'My Farm', // Default farm name
+          farm_location: 'Unknown' // Default location
+        })
+        .select()
+        .single()
+
+      if (createFarmerError) {
+        console.error('Failed to create farmer record:', createFarmerError)
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to create farmer profile', 
+            details: createFarmerError.message 
+          }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        )
+      }
+
+      console.log('Created new farmer record:', newFarmer)
+      // Use the newly created farmer ID
+      farmerId = newFarmer.id
+    } else {
+      console.log('Farmer verified:', farmer)
+    }
+
     // Create the product
+    console.log('Creating product with farmer ID:', farmerId)
     const { data: product, error: productError } = await supabaseClient
       .from('products')
       .insert({
@@ -65,6 +115,8 @@ serve(async (req) => {
       )
     }
 
+    console.log('Product created successfully:', product)
+
     return new Response(
       JSON.stringify({ product }),
       { 
@@ -76,7 +128,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error creating product:', error)
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ error: 'Internal server error', details: error.message }),
       { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
