@@ -26,121 +26,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const getCurrentUser = async () => {
-      setLoading(true);
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          const { data: userData, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          
-          if (error || !userData) {
-            console.error('Error fetching user:', error);
-            return;
-          }
-
-          const currentUser: User = {
-            id: userData.id,
-            email: userData.email,
-            username: userData.username,
-            contactInfo: userData.contact_info || undefined,
-            role: userData.user_role as 'farmer' | 'consumer',
-            created_at: userData.created_at
-          };
-          
-          setUser(currentUser);
-
-          // Fetch role-specific information
-          if (currentUser.role === 'farmer') {
-            const { data: farmerData } = await supabase
-              .from('farmers')
-              .select('*')
-              .eq('user_id', currentUser.id)
-              .single();
-            
-            if (farmerData) {
-              setFarmer({
-                ...currentUser,
-                farmName: farmerData.farm_name,
-                farmLocation: farmerData.farm_location,
-                profileImage: farmerData.profile_image || undefined
-              });
-            }
-          } else if (currentUser.role === 'consumer') {
-            const { data: consumerData } = await supabase
-              .from('consumers')
-              .select('*')
-              .eq('user_id', currentUser.id)
-              .single();
-            
-            if (consumerData) {
-              setConsumer({
-                ...currentUser,
-                location: consumerData.location,
-                profileImage: consumerData.profile_image || undefined
-              });
-            }
-          }
-        }
-      } catch (error: any) {
-        console.error('Error getting current user:', error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    getCurrentUser();
-
-    // Set up auth listener
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        getCurrentUser();
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setFarmer(null);
-        setConsumer(null);
-      }
-    });
-
-    return () => {
-      if (authListener && authListener.subscription) {
-        authListener.subscription.unsubscribe();
-      }
-    };
-  }, []);
-
-  const signIn = async (email: string, password: string) => {
-    try {
-      setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      
-      if (error) {
-        toast({
-          title: "Authentication error",
-          description: error.message,
-          variant: "destructive"
-        });
-        throw error;
-      }
-      
-      toast({
-        title: "Welcome back!",
-        description: "You've successfully signed in."
-      });
-    } catch (error: any) {
-      console.error('Error signing in:', error.message);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const signUp = async (email: string, password: string, username: string, role: 'farmer' | 'consumer', location?: string) => {
     try {
       setLoading(true);
@@ -186,7 +71,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Now create the role-specific profile
       if (role === 'consumer') {
-        // Use the function to create a consumer profile with the provided location
         const success = await ensureConsumerRecordExists(authData.user.id, location || '');
         
         if (!success) {
@@ -201,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         console.log('Consumer profile created successfully via RPC');
       } else if (role === 'farmer') {
-        // Create farmer profile
+        // Use the new database function that automatically copies user data
         const success = await ensureFarmerRecordExists(authData.user.id);
         
         if (!success) {
@@ -214,7 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error("Failed to create farmer profile");
         }
         
-        console.log('Farmer profile created successfully');
+        console.log('Farmer profile created successfully with user data');
       }
 
       toast({
@@ -222,9 +106,123 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: `You've successfully signed up as a ${role}.`
       });
       
-      // Return void instead of authData to match the interface
     } catch (error: any) {
       console.error('Error signing up:', error.message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCurrentUser = async () => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (error || !userData) {
+          console.error('Error fetching user:', error);
+          return;
+        }
+
+        const currentUser: User = {
+          id: userData.id,
+          email: userData.email,
+          username: userData.username,
+          contactInfo: userData.contact_info || undefined,
+          role: userData.user_role as 'farmer' | 'consumer',
+          created_at: userData.created_at
+        };
+        
+        setUser(currentUser);
+
+        // Fetch role-specific information with user data
+        if (currentUser.role === 'farmer') {
+          const { data: farmerData } = await supabase
+            .from('farmers')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .single();
+          
+          if (farmerData) {
+            setFarmer({
+              ...currentUser,
+              farmName: farmerData.farm_name,
+              farmLocation: farmerData.farm_location,
+              profileImage: farmerData.profile_image || undefined
+            });
+          }
+        } else if (currentUser.role === 'consumer') {
+          const { data: consumerData } = await supabase
+            .from('consumers')
+            .select('*')
+            .eq('user_id', currentUser.id)
+            .single();
+          
+          if (consumerData) {
+            setConsumer({
+              ...currentUser,
+              location: consumerData.location,
+              profileImage: consumerData.profile_image || undefined
+            });
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Error getting current user:', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    getCurrentUser();
+
+    // Set up auth listener
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        getCurrentUser();
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setFarmer(null);
+        setConsumer(null);
+      }
+    });
+
+    return () => {
+      if (authListener && authListener.subscription) {
+        authListener.subscription.unsubscribe();
+      }
+    };
+  }, []);
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (error) {
+        toast({
+          title: "Authentication error",
+          description: error.message,
+          variant: "destructive"
+        });
+        throw error;
+      }
+      
+      toast({
+        title: "Welcome back!",
+        description: "You've successfully signed in."
+      });
+    } catch (error: any) {
+      console.error('Error signing in:', error.message);
       throw error;
     } finally {
       setLoading(false);
@@ -398,3 +396,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export default AuthProvider;

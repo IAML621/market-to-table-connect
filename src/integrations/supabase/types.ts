@@ -43,28 +43,37 @@ export type Database = {
       }
       farmers: {
         Row: {
+          contact_info: string | null
           created_at: string
+          email: string | null
           farm_location: string
           farm_name: string
           id: string
           profile_image: string | null
           user_id: string
+          username: string | null
         }
         Insert: {
+          contact_info?: string | null
           created_at?: string
+          email?: string | null
           farm_location: string
           farm_name: string
           id?: string
           profile_image?: string | null
           user_id: string
+          username?: string | null
         }
         Update: {
+          contact_info?: string | null
           created_at?: string
+          email?: string | null
           farm_location?: string
           farm_name?: string
           id?: string
           profile_image?: string | null
           user_id?: string
+          username?: string | null
         }
         Relationships: [
           {
@@ -351,6 +360,14 @@ export type Database = {
         Returns: {
           id: string
         }[]
+      }
+      create_farmer_with_user_data: {
+        Args: {
+          p_user_id: string
+          p_farm_name?: string
+          p_farm_location?: string
+        }
+        Returns: string
       }
       get_user_consumer_id: {
         Args: Record<PropertyKey, never>

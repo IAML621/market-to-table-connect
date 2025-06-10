@@ -37,40 +37,32 @@ serve(async (req) => {
 
     console.log('Authenticated user:', user.id)
 
-    const { name, description, price, stockLevel, farmerId, imageUrl, category, unit, isOrganic } = await req.json()
+    const { name, description, price, stockLevel, imageUrl, category, unit, isOrganic } = await req.json()
 
-    console.log('Received farmer ID:', farmerId)
-
-    // First verify that the farmer exists and belongs to the current user
+    // Get farmer record for the authenticated user (with user data copied)
     const { data: farmer, error: farmerError } = await supabaseClient
       .from('farmers')
-      .select('id, user_id')
-      .eq('id', farmerId)
+      .select('id, user_id, username, email, farm_name, farm_location')
       .eq('user_id', user.id)
       .single()
 
     if (farmerError || !farmer) {
-      console.error('Farmer verification error:', farmerError)
-      console.log('No farmer found for ID:', farmerId, 'and user ID:', user.id)
+      console.error('Farmer not found:', farmerError)
+      console.log('Creating farmer record for user:', user.id)
       
-      // Try to create a farmer record if it doesn't exist
-      console.log('Attempting to create farmer record...')
-      const { data: newFarmer, error: createFarmerError } = await supabaseClient
-        .from('farmers')
-        .insert({
-          user_id: user.id,
-          farm_name: 'My Farm', // Default farm name
-          farm_location: 'Unknown' // Default location
-        })
-        .select()
-        .single()
+      // Use the database function to create farmer with user data
+      const { data: farmerId, error: createError } = await supabaseClient.rpc('create_farmer_with_user_data', {
+        p_user_id: user.id,
+        p_farm_name: null,
+        p_farm_location: null
+      })
 
-      if (createFarmerError) {
-        console.error('Failed to create farmer record:', createFarmerError)
+      if (createError || !farmerId) {
+        console.error('Failed to create farmer record:', createError)
         return new Response(
           JSON.stringify({ 
             error: 'Failed to create farmer profile', 
-            details: createFarmerError.message 
+            details: createError?.message 
           }),
           { 
             status: 400, 
@@ -79,23 +71,56 @@ serve(async (req) => {
         )
       }
 
-      console.log('Created new farmer record:', newFarmer)
-      // Use the newly created farmer ID
-      farmerId = newFarmer.id
-    } else {
-      console.log('Farmer verified:', farmer)
+      console.log('Created new farmer record with ID:', farmerId)
+
+      // Create the product with the new farmer ID
+      const { data: product, error: productError } = await supabaseClient
+        .from('products')
+        .insert({
+          name,
+          description,
+          price: parseFloat(price),
+          stock_level: parseInt(stockLevel),
+          farmer_id: farmerId,
+          image_url: imageUrl,
+          category,
+          unit,
+          is_organic: isOrganic
+        })
+        .select()
+        .single()
+
+      if (productError) {
+        console.error('Product creation error:', productError)
+        return new Response(
+          JSON.stringify({ error: 'Failed to create product', details: productError.message }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({ product }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
     }
 
-    // Create the product
-    console.log('Creating product with farmer ID:', farmerId)
+    console.log('Found existing farmer:', farmer)
+
+    // Create the product with the existing farmer
     const { data: product, error: productError } = await supabaseClient
       .from('products')
       .insert({
         name,
         description,
-        price,
-        stock_level: stockLevel,
-        farmer_id: farmerId,
+        price: parseFloat(price),
+        stock_level: parseInt(stockLevel),
+        farmer_id: farmer.id,
         image_url: imageUrl,
         category,
         unit,

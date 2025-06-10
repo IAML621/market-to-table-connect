@@ -60,46 +60,26 @@ const AddProduct = () => {
     try {
       console.log('Starting product creation for user:', user.id);
 
-      // Get or create farmer ID
-      let farmerId = null;
-      const { data: farmer, error: farmerError } = await supabase
-        .from('farmers')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (farmerError && farmerError.code !== 'PGRST116') {
-        // Error other than "not found"
-        console.error('Error fetching farmer:', farmerError);
-        setError('Failed to retrieve farmer information.');
-        setLoading(false);
-        return;
-      }
-
-      if (farmer) {
-        farmerId = farmer.id;
-        console.log('Found existing farmer ID:', farmerId);
-      } else {
-        // Create farmer record
-        console.log('No farmer record found, will be created by edge function');
-        // We'll pass a placeholder ID and let the edge function handle farmer creation
-        farmerId = 'auto-create';
-      }
-
       let productImageUrl = null;
       if (image) {
         console.log('Uploading product image...');
-        // For image upload, we need a real farmer ID, so let's create one if needed
-        if (farmerId === 'auto-create') {
-          const { data: newFarmer, error: createError } = await supabase
-            .from('farmers')
-            .insert({
-              user_id: user.id,
-              farm_name: 'My Farm',
-              farm_location: 'Unknown'
-            })
-            .select()
-            .single();
+        
+        // Get or create farmer record first for image upload
+        const { data: farmer, error: farmerError } = await supabase
+          .from('farmers')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+
+        let farmerId = farmer?.id;
+        
+        if (farmerError && farmerError.code === 'PGRST116') {
+          // Farmer doesn't exist, create one using the database function
+          const { data: newFarmerId, error: createError } = await supabase.rpc('create_farmer_with_user_data', {
+            p_user_id: user.id,
+            p_farm_name: null,
+            p_farm_location: null
+          });
 
           if (createError) {
             console.error('Failed to create farmer for image upload:', createError);
@@ -108,8 +88,13 @@ const AddProduct = () => {
             return;
           }
           
-          farmerId = newFarmer.id;
+          farmerId = newFarmerId;
           console.log('Created farmer for image upload:', farmerId);
+        } else if (farmerError) {
+          console.error('Error checking farmer:', farmerError);
+          setError('Failed to verify farmer profile.');
+          setLoading(false);
+          return;
         }
 
         productImageUrl = await uploadProductImage(image, farmerId);
@@ -122,14 +107,13 @@ const AddProduct = () => {
       }
 
       // Create the product using the edge function
-      console.log('Calling create-product edge function with farmer ID:', farmerId);
+      console.log('Calling create-product edge function');
       const { data, error } = await supabase.functions.invoke('create-product', {
         body: {
           name,
           description,
           price: parseFloat(price),
           stockLevel: parseInt(stockLevel),
-          farmerId,
           imageUrl: productImageUrl,
           category,
           unit,
