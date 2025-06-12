@@ -14,6 +14,8 @@ const Profile = () => {
   const { user, farmer, consumer, loading, signOut, updateUserProfile } = useAuth();
   const navigate = useNavigate();
   
+  console.log('Profile component - user:', user, 'farmer:', farmer, 'consumer:', consumer);
+  
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState(user?.username || '');
   const [location, setLocation] = useState(consumer?.location || '');

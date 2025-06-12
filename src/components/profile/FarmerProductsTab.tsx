@@ -32,8 +32,12 @@ interface FarmerProductsTabProps {
 
 export const FarmerProductsTab: React.FC<FarmerProductsTabProps> = ({ farmerId }) => {
   const navigate = useNavigate();
+  console.log('FarmerProductsTab - farmerId:', farmerId);
+  
   const { products, loading, error, deleteProduct } = useFarmerProducts(farmerId);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  console.log('FarmerProductsTab - products:', products, 'loading:', loading, 'error:', error);
 
   const handleDelete = async (productId: string) => {
     setDeletingId(productId);
@@ -81,6 +85,31 @@ export const FarmerProductsTab: React.FC<FarmerProductsTabProps> = ({ farmerId }
             className="bg-market-green hover:bg-market-green-dark"
           >
             Try Again
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!farmerId) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Products</CardTitle>
+        </CardHeader>
+        <CardContent className="text-center py-12">
+          <div className="rounded-full bg-muted w-16 h-16 mx-auto flex items-center justify-center mb-4">
+            <Package className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-medium mb-1">Unable to load products</h3>
+          <p className="text-muted-foreground mb-6">
+            Farmer information not found. Please refresh the page.
+          </p>
+          <Button 
+            onClick={() => window.location.reload()}
+            className="bg-market-green hover:bg-market-green-dark"
+          >
+            Refresh Page
           </Button>
         </CardContent>
       </Card>

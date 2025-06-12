@@ -149,7 +149,7 @@ const Index = () => {
         </Button>
       </section>
       
-      {/* Products Grid */}
+      {/* Products Grid - Now shows for ALL users */}
       <section className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {loading ? (
           // Loading skeletons
@@ -182,7 +182,7 @@ const Index = () => {
         )}
       </section>
       
-      {/* CTA Section */}
+      {/* CTA Section - Only show for non-authenticated users */}
       {!user && (
         <section className="rounded-xl bg-secondary p-6 md:p-10 text-center mt-10">
           <h2 className="text-2xl font-bold mb-4">Ready to connect with local farmers?</h2>

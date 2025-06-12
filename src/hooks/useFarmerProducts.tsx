@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Product } from '@/types';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 export const useFarmerProducts = (farmerId?: string) => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -40,6 +40,8 @@ export const useFarmerProducts = (farmerId?: string) => {
           return;
         }
 
+        console.log('Raw farmer products data:', data);
+
         if (!data) {
           setProducts([]);
           return;
@@ -64,6 +66,7 @@ export const useFarmerProducts = (farmerId?: string) => {
           unit: item.unit || 'each'
         }));
         
+        console.log('Formatted farmer products:', formattedProducts);
         setProducts(formattedProducts);
       } catch (error: any) {
         console.error('Exception in fetchFarmerProducts:', error);
