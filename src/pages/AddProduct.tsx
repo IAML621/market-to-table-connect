@@ -152,7 +152,16 @@ const AddProduct = () => {
 
   return (
     <div className="container py-8">
-      <h1 className="text-2xl font-bold mb-4">Add New Product</h1>
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Add New Product</h1>
+        <Button 
+          onClick={() => navigate('/add-products-bulk')}
+          variant="outline"
+          className="border-market-green text-market-green hover:bg-market-green hover:text-white"
+        >
+          Add Multiple Products
+        </Button>
+      </div>
       {error && (
         <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm mb-4">
           {error}
