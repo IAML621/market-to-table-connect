@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,6 +16,7 @@ import Checkout from "./pages/Checkout";
 import Profile from "./pages/Profile";
 import Messages from "./pages/Messages";
 import AddProduct from "./pages/AddProduct";
+import BulkAddProduct from "./pages/BulkAddProduct";
 import Products from "./pages/Products";
 import NotFound from "./pages/NotFound";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -49,6 +51,7 @@ const App = () => (
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/messages" element={<Messages />} />
                 <Route path="/add-product" element={<AddProduct />} />
+                <Route path="/add-products-bulk" element={<BulkAddProduct />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Route>
