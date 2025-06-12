@@ -84,7 +84,7 @@ export const useProductsData = () => {
             farmerId: item.farmer_id,
             farmName: farmName,
             farmerName: farmerName,
-            imageUrl: item.image_url || undefined,
+            imageUrl: item.image_url || undefined, // Fix: properly handle null/undefined image URLs
             created_at: item.created_at,
             category: item.category || 'Uncategorized',
             isOrganic: item.is_organic || false,
